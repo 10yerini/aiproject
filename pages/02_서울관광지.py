@@ -244,3 +244,8 @@ st.markdown(
     "[서울시 외국인 관광객 분석 자료 보기]"
     "(https://english.seoul.go.kr/from-k-culture-to-k-hiking-foreign-tourists-venture-beyond-seouls-top-attractions/)"
 )
+This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
+Traceback:
+File "/mount/src/aiproject/pages/03_관광지.py", line 203, in <module>
+    st.divider()
+    ^^
