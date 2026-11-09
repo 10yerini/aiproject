@@ -1,9 +1,8 @@
 
-import csv
-from pathlib import Path
-
 import streamlit as st
-
+import pandas as pd
+import plotly.graph_objects as go
+from pathlib import Path
 
 # ==========================================
 # 1. 기본 설정
@@ -28,93 +27,128 @@ CSV_PATH = Path(__file__).parent / "countriesMBTI_16types.csv"
 
 
 # ==========================================
-# 2. 데이터 불러오기
+# 2. CSV 데이터 불러오기
 # ==========================================
 @st.cache_data
-def load_data():
+def load_data(file_path):
 
-    data = []
+    df = pd.read_csv(
+        file_path,
+        encoding="utf-8-sig"
+    )
 
-    with open(
-        CSV_PATH,
-        "r",
-        encoding="utf-8-sig",
-        newline=""
-    ) as file:
+    required_columns = ["Country"] + MBTI_TYPES
 
-        reader = csv.DictReader(file)
+    missing_columns = [
+        col for col in required_columns
+        if col not in df.columns
+    ]
 
-        for row in reader:
+    if missing_columns:
+        raise ValueError(
+            "CSV 파일에 필요한 열이 없습니다: "
+            + ", ".join(missing_columns)
+        )
 
-            item = {
-                "Country": row["Country"]
-            }
+    df = df[required_columns].copy()
 
-            for mbti in MBTI_TYPES:
-                item[mbti] = float(row[mbti])
+    df["Country"] = df["Country"].astype(str).str.strip()
 
-            data.append(item)
+    for mbti in MBTI_TYPES:
+        df[mbti] = pd.to_numeric(
+            df[mbti],
+            errors="coerce"
+        )
 
-    return data
+    df = df.dropna(
+        subset=["Country"] + MBTI_TYPES
+    )
+
+    df = df[df["Country"] != ""]
+
+    if df.empty:
+        raise ValueError("분석할 데이터가 없습니다.")
+
+    return df
 
 
+# 파일 존재 여부 확인
 if not CSV_PATH.exists():
+
     st.error(
         "countriesMBTI_16types.csv 파일을 찾을 수 없습니다."
     )
+
     st.stop()
 
+
 try:
-    data = load_data()
+    df = load_data(CSV_PATH)
 
 except Exception as error:
+
     st.error(f"데이터 오류: {error}")
+
     st.stop()
 
 
 # ==========================================
 # 3. 국가 선택
 # ==========================================
+st.sidebar.header("🌎 국가 선택")
+
 countries = sorted(
-    [row["Country"] for row in data]
+    df["Country"].unique().tolist()
 )
 
-st.sidebar.title("🌎 국가 선택")
+default_index = (
+    countries.index("South Korea")
+    if "South Korea" in countries
+    else 0
+)
 
 selected_country = st.sidebar.selectbox(
     "분석할 국가를 선택하세요.",
     countries,
-    index=(
-        countries.index("South Korea")
-        if "South Korea" in countries
-        else 0
-    )
-)
-
-country_data = next(
-    row for row in data
-    if row["Country"] == selected_country
+    index=default_index
 )
 
 
 # ==========================================
-# 4. MBTI 비율 순위 계산
+# 4. 선택 국가 데이터 추출
 # ==========================================
-ranking = sorted(
-    [
-        (mbti, country_data[mbti])
+country_row = df.loc[
+    df["Country"] == selected_country
+].iloc[0]
+
+
+# ==========================================
+# 5. MBTI 비율 계산 및 정렬
+# ==========================================
+chart_df = pd.DataFrame({
+
+    "MBTI": MBTI_TYPES,
+
+    "비율": [
+        float(country_row[mbti]) * 100
         for mbti in MBTI_TYPES
-    ],
-    key=lambda x: x[1],
-    reverse=True
-)
+    ]
 
-top_mbti = ranking[0][0]
-top_value = ranking[0][1]
+})
+
+chart_df = chart_df.sort_values(
+    by="비율",
+    ascending=False
+).reset_index(drop=True)
+
+
+top_mbti = chart_df.loc[0, "MBTI"]
+
+top_percentage = chart_df.loc[0, "비율"]
 
 
 # ==========================================
-# 5. 주요 정보 표시
+# 6. 주요 정보 표시
 # ==========================================
 col1, col2, col3 = st.columns(3)
 
@@ -130,29 +164,17 @@ col2.metric(
 
 col3.metric(
     "1위 비율",
-    f"{top_value * 100:.2f}%"
+    f"{top_percentage:.2f}%"
 )
 
 st.divider()
 
 
 # ==========================================
-# 6. 그래프 제목
-# ==========================================
-st.subheader(
-    f"📊 {selected_country}의 MBTI 비율"
-)
-
-st.caption(
-    "1위는 빨간색, 나머지는 파란색 계열의 "
-    "그라데이션으로 표시됩니다."
-)
-
-
-# ==========================================
 # 7. 그래프 색상 설정
 # ==========================================
 blue_gradient = [
+
     "#1769D2",
     "#2878D8",
     "#3987DE",
@@ -168,138 +190,148 @@ blue_gradient = [
     "#D3EFFC",
     "#DDF3FD",
     "#E7F7FE"
+
 ]
 
+# 1위 빨간색 + 나머지 파란색 그라데이션
+bar_colors = [
+    "#E53935"
+] + blue_gradient
+
 
 # ==========================================
-# 8. 막대그래프 만들기
+# 8. Plotly 막대그래프
 # ==========================================
-chart_html = """
-<style>
+fig = go.Figure()
 
-.mbti-chart {
-    width: 100%;
-    font-family: Arial, sans-serif;
-}
+fig.add_trace(
 
-.mbti-row {
-    display: grid;
-    grid-template-columns: 60px 1fr 80px;
-    align-items: center;
-    gap: 12px;
-    margin: 12px 0;
-}
+    go.Bar(
 
-.mbti-label {
-    font-size: 14px;
-    font-weight: bold;
-}
+        x=chart_df["MBTI"],
 
-.mbti-track {
-    width: 100%;
-    height: 25px;
-    background: rgba(128,128,128,0.12);
-    border-radius: 6px;
-    overflow: hidden;
-}
+        y=chart_df["비율"],
 
-.mbti-bar {
-    height: 25px;
-    border-radius: 6px;
-}
+        marker=dict(
+            color=bar_colors,
+            line=dict(width=0)
+        ),
 
-.mbti-value {
-    text-align: right;
-    font-size: 13px;
-    font-weight: bold;
-}
+        text=[
+            f"{value:.2f}%"
+            for value in chart_df["비율"]
+        ],
 
-</style>
+        textposition="outside",
 
-<div class="mbti-chart">
-"""
+        cliponaxis=False,
 
-max_value = max(
-    value for mbti, value in ranking
-)
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "비율: %{y:.2f}%"
+            "<extra></extra>"
+        )
 
-for index, (mbti, value) in enumerate(ranking):
-
-    if index == 0:
-        bar_color = "#E53935"
-
-    else:
-        bar_color = blue_gradient[index - 1]
-
-    width = (
-        value / max_value * 100
-        if max_value > 0
-        else 0
     )
 
-    percentage = value * 100
-
-    chart_html += f"""
-    <div class="mbti-row">
-
-        <div class="mbti-label">
-            {mbti}
-        </div>
-
-        <div class="mbti-track">
-
-            <div
-                class="mbti-bar"
-                style="
-                    width:{width:.2f}%;
-                    background:{bar_color};
-                "
-            >
-            </div>
-
-        </div>
-
-        <div class="mbti-value">
-            {percentage:.2f}%
-        </div>
-
-    </div>
-    """
-
-chart_html += "</div>"
-
-st.markdown(
-    chart_html,
-    unsafe_allow_html=True
 )
 
 
 # ==========================================
-# 9. MBTI 순위표
+# 9. 그래프 디자인
 # ==========================================
-st.divider()
+fig.update_layout(
 
-st.subheader("🏆 MBTI 순위")
+    title=dict(
+        text=f"{selected_country}의 MBTI 유형별 비율",
+        x=0.02,
+        xanchor="left"
+    ),
 
-for index, (mbti, value) in enumerate(
-    ranking,
-    start=1
-):
+    xaxis_title="MBTI 유형",
 
-    st.write(
-        f"**{index}위. {mbti}** "
-        f"- {value * 100:.2f}%"
+    yaxis_title="비율(%)",
+
+    yaxis=dict(
+        rangemode="tozero",
+        ticksuffix="%",
+        showgrid=True
+    ),
+
+    xaxis=dict(
+        categoryorder="array",
+        categoryarray=chart_df["MBTI"].tolist()
+    ),
+
+    showlegend=False,
+
+    height=570,
+
+    margin=dict(
+        l=25,
+        r=25,
+        t=75,
+        b=45
+    ),
+
+    hoverlabel=dict(
+        namelength=-1
     )
 
+)
+
 
 # ==========================================
-# 10. 하단 안내
+# 10. 그래프 출력
 # ==========================================
-st.divider()
+st.subheader("📊 국가별 MBTI 비율")
 
 st.caption(
-    "※ 본 자료는 제공된 CSV 데이터의 국가별 MBTI "
-    "분포를 시각화한 것입니다."
+    "1위는 빨간색, 나머지는 순위가 낮아질수록 "
+    "파란색이 점점 연해집니다."
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={
+        "displayModeBar": True
+    }
+)
+
+
+# ==========================================
+# 11. MBTI 전체 순위표
+# ==========================================
+st.divider()
+
+st.subheader("🏆 MBTI 비율 순위")
+
+display_df = chart_df.copy()
+
+display_df.insert(
+    0,
+    "순위",
+    range(1, len(display_df) + 1)
+)
+
+display_df["비율"] = display_df["비율"].map(
+    lambda value: f"{value:.2f}%"
+)
+
+st.dataframe(
+    display_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+
+# ==========================================
+# 12. 하단 안내
+# ==========================================
+st.caption(
+    "※ 본 자료는 제공된 CSV의 국가별 MBTI 분포를 "
+    "시각화한 것입니다."
 )
 
 st.caption(
