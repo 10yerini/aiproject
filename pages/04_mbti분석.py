@@ -14,7 +14,9 @@ st.set_page_config(
 )
 
 st.title("🌍 세계 MBTI 국가별 분석")
-st.write("국가를 선택하고 MBTI 유형별 비율을 확인해 보세요!")
+st.write(
+    "국가를 선택하고 MBTI 유형별 비율을 확인해 보세요!"
+)
 
 MBTI_TYPES = [
     "INFJ", "ISFJ", "INTP", "ISFP",
@@ -23,11 +25,19 @@ MBTI_TYPES = [
     "ESTP", "ISTJ", "ENFJ", "ESFJ"
 ]
 
-CSV_PATH = Path(__file__).parent / "countriesMBTI_16types.csv"
+# ==========================================
+# 2. CSV 파일 경로 설정
+# ==========================================
+
+# 현재 파일 위치: aiproject/pages/03_국가별MBTI.py
+# 부모 폴더 위치: aiproject/
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+CSV_PATH = BASE_DIR / "countriesMBTI_16types.csv"
 
 
 # ==========================================
-# 2. CSV 데이터 불러오기
+# 3. CSV 데이터 불러오기
 # ==========================================
 @st.cache_data
 def load_data(file_path):
@@ -52,7 +62,11 @@ def load_data(file_path):
 
     df = df[required_columns].copy()
 
-    df["Country"] = df["Country"].astype(str).str.strip()
+    df["Country"] = (
+        df["Country"]
+        .astype(str)
+        .str.strip()
+    )
 
     for mbti in MBTI_TYPES:
         df[mbti] = pd.to_numeric(
@@ -67,33 +81,49 @@ def load_data(file_path):
     df = df[df["Country"] != ""]
 
     if df.empty:
-        raise ValueError("분석할 데이터가 없습니다.")
+        raise ValueError(
+            "분석할 데이터가 없습니다."
+        )
 
     return df
 
 
-# 파일 존재 여부 확인
+# ==========================================
+# 4. CSV 파일 존재 여부 확인
+# ==========================================
 if not CSV_PATH.exists():
 
     st.error(
-        "countriesMBTI_16types.csv 파일을 찾을 수 없습니다."
+        "CSV 파일을 찾을 수 없습니다."
+    )
+
+    st.write(
+        f"찾으려는 경로: {CSV_PATH}"
+    )
+
+    st.info(
+        "countriesMBTI_16types.csv 파일이 "
+        "프로젝트 최상위 폴더에 있는지 확인하세요."
     )
 
     st.stop()
 
 
 try:
-    df = load_data(CSV_PATH)
+
+    df = load_data(str(CSV_PATH))
 
 except Exception as error:
 
-    st.error(f"데이터 오류: {error}")
+    st.error(
+        f"데이터를 불러오지 못했습니다: {error}"
+    )
 
     st.stop()
 
 
 # ==========================================
-# 3. 국가 선택
+# 5. 국가 선택
 # ==========================================
 st.sidebar.header("🌎 국가 선택")
 
@@ -115,7 +145,7 @@ selected_country = st.sidebar.selectbox(
 
 
 # ==========================================
-# 4. 선택 국가 데이터 추출
+# 6. 선택 국가 데이터 추출
 # ==========================================
 country_row = df.loc[
     df["Country"] == selected_country
@@ -123,7 +153,7 @@ country_row = df.loc[
 
 
 # ==========================================
-# 5. MBTI 비율 계산 및 정렬
+# 7. MBTI 비율 계산 및 정렬
 # ==========================================
 chart_df = pd.DataFrame({
 
@@ -148,7 +178,7 @@ top_percentage = chart_df.loc[0, "비율"]
 
 
 # ==========================================
-# 6. 주요 정보 표시
+# 8. 주요 정보 표시
 # ==========================================
 col1, col2, col3 = st.columns(3)
 
@@ -171,7 +201,7 @@ st.divider()
 
 
 # ==========================================
-# 7. 그래프 색상 설정
+# 9. 그래프 색상 설정
 # ==========================================
 blue_gradient = [
 
@@ -193,14 +223,15 @@ blue_gradient = [
 
 ]
 
-# 1위 빨간색 + 나머지 파란색 그라데이션
+# 1위는 빨간색
+# 나머지는 파란색 그라데이션
 bar_colors = [
     "#E53935"
 ] + blue_gradient
 
 
 # ==========================================
-# 8. Plotly 막대그래프
+# 10. Plotly 막대그래프
 # ==========================================
 fig = go.Figure()
 
@@ -238,7 +269,7 @@ fig.add_trace(
 
 
 # ==========================================
-# 9. 그래프 디자인
+# 11. 그래프 디자인
 # ==========================================
 fig.update_layout(
 
@@ -282,7 +313,7 @@ fig.update_layout(
 
 
 # ==========================================
-# 10. 그래프 출력
+# 12. 그래프 출력
 # ==========================================
 st.subheader("📊 국가별 MBTI 비율")
 
@@ -301,7 +332,7 @@ st.plotly_chart(
 
 
 # ==========================================
-# 11. MBTI 전체 순위표
+# 13. MBTI 전체 순위표
 # ==========================================
 st.divider()
 
@@ -327,8 +358,10 @@ st.dataframe(
 
 
 # ==========================================
-# 12. 하단 안내
+# 14. 하단 안내
 # ==========================================
+st.divider()
+
 st.caption(
     "※ 본 자료는 제공된 CSV의 국가별 MBTI 분포를 "
     "시각화한 것입니다."
