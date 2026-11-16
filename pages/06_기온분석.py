@@ -4,9 +4,9 @@ import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 
-# --------------------------------
+# =====================================
 # 1. 페이지 설정
-# --------------------------------
+# =====================================
 
 st.set_page_config(
     page_title="월별 기온분석",
@@ -14,39 +14,53 @@ st.set_page_config(
     layout="wide"
 )
 
-# --------------------------------
+# =====================================
 # 2. 제목
-# --------------------------------
+# =====================================
 
 st.title("🌡️ 월별 기온분석")
-st.write("원하는 월을 선택하여 연도별 최고기온과 최저기온을 비교해 보세요!")
+
+st.write(
+    "원하는 월을 선택하면 2007년부터 2026년까지 "
+    "연도별 최고기온과 최저기온을 비교할 수 있습니다."
+)
 
 st.divider()
 
-# --------------------------------
+# =====================================
 # 3. CSV 파일 불러오기
-# --------------------------------
+# =====================================
 
-# pages 폴더의 상위 폴더에서 CSV 찾기
+# pages 폴더의 상위 폴더 경로
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 CSV_PATH = BASE_DIR / "temperature.csv"
 
 try:
     try:
-        df = pd.read_csv(CSV_PATH, encoding="cp949")
+        df = pd.read_csv(
+            CSV_PATH,
+            encoding="cp949"
+        )
+
     except UnicodeDecodeError:
-        df = pd.read_csv(CSV_PATH, encoding="utf-8-sig")
+        df = pd.read_csv(
+            CSV_PATH,
+            encoding="utf-8-sig"
+        )
 
 except FileNotFoundError:
-    st.error("temperature.csv 파일을 찾을 수 없습니다.")
+    st.error(
+        "temperature.csv 파일을 찾을 수 없습니다. "
+        "pages 폴더의 상위 폴더에 CSV 파일을 넣어 주세요."
+    )
     st.stop()
 
-# 컬럼 이름 공백 제거
-df.columns = df.columns.str.strip()
+# =====================================
+# 4. 컬럼 이름 정리
+# =====================================
 
-# --------------------------------
-# 4. 날짜 데이터 처리
-# --------------------------------
+df.columns = df.columns.str.strip()
 
 required_columns = [
     "일시",
@@ -54,12 +68,16 @@ required_columns = [
     "최저기온(℃)"
 ]
 
-if not all(col in df.columns for col in required_columns):
-    st.error("CSV 파일의 컬럼 이름을 확인해 주세요.")
-    st.write("현재 컬럼:", df.columns.tolist())
-    st.stop()
+for col in required_columns:
+    if col not in df.columns:
+        st.error(f"'{col}' 컬럼을 찾을 수 없습니다.")
+        st.write("현재 CSV 컬럼:", df.columns.tolist())
+        st.stop()
 
-# Oct-07 형식의 날짜 변환
+# =====================================
+# 5. 날짜 데이터 처리
+# =====================================
+
 df["날짜"] = pd.to_datetime(
     df["일시"].astype(str).str.strip(),
     format="%b-%y",
@@ -70,7 +88,7 @@ df["날짜"] = pd.to_datetime(
 df["연도"] = df["날짜"].dt.year
 df["월"] = df["날짜"].dt.month
 
-# 기온 데이터 숫자로 변환
+# 기온을 숫자로 변환
 df["최고기온(℃)"] = pd.to_numeric(
     df["최고기온(℃)"],
     errors="coerce"
@@ -81,16 +99,18 @@ df["최저기온(℃)"] = pd.to_numeric(
     errors="coerce"
 )
 
-# 날짜가 정상적으로 변환된 데이터만 사용
-df = df.dropna(subset=["날짜"]).copy()
+# 날짜가 없는 행 제거
+df = df.dropna(
+    subset=["날짜"]
+).copy()
 
 if df.empty:
-    st.error("날짜 데이터를 읽을 수 없습니다.")
+    st.error("날짜 데이터를 확인할 수 없습니다.")
     st.stop()
 
-# --------------------------------
-# 5. 월 선택
-# --------------------------------
+# =====================================
+# 6. 월 선택
+# =====================================
 
 month_names = [
     "1월", "2월", "3월", "4월",
@@ -100,29 +120,34 @@ month_names = [
 
 selected_month = st.selectbox(
     "📅 분석할 월을 선택하세요.",
-    range(1, 13),
+    options=list(range(1, 13)),
     format_func=lambda x: month_names[x - 1]
 )
 
-# --------------------------------
-# 6. 선택한 월 데이터 추출
-# --------------------------------
+# =====================================
+# 7. 선택한 월의 데이터 추출
+# =====================================
 
-month_df = df[df["월"] == selected_month].copy()
+month_df = df[
+    (df["월"] == selected_month) &
+    (df["연도"] >= 2007) &
+    (df["연도"] <= 2026)
+].copy()
 
+# 연도순 정렬
 month_df = month_df.sort_values("연도")
 
 if month_df.empty:
     st.warning("선택한 월의 데이터가 없습니다.")
     st.stop()
 
-# --------------------------------
-# 7. 꺾은선 그래프
-# --------------------------------
+# =====================================
+# 8. 그래프 생성
+# =====================================
 
 fig = go.Figure()
 
-# 최고기온: 핑크색
+# 최고기온 데이터
 high_df = month_df.dropna(
     subset=["최고기온(℃)"]
 )
@@ -137,12 +162,14 @@ fig.add_trace(
             color="#FF69B4",
             width=3
         ),
-        marker=dict(size=8),
-        connectgaps=False
+        marker=dict(
+            size=8,
+            color="#FF69B4"
+        )
     )
 )
 
-# 최저기온: 하늘색
+# 최저기온 데이터
 low_df = month_df.dropna(
     subset=["최저기온(℃)"]
 )
@@ -157,16 +184,20 @@ fig.add_trace(
             color="#87CEEB",
             width=3
         ),
-        marker=dict(size=8),
-        connectgaps=False
+        marker=dict(
+            size=8,
+            color="#87CEEB"
+        )
     )
 )
 
-# --------------------------------
-# 8. 그래프 디자인
-# --------------------------------
+# =====================================
+# 9. 그래프 디자인
+# =====================================
 
 fig.update_layout(
+
+    # 그래프 제목
     title=dict(
         text="월별 기온분석",
         x=0.5,
@@ -174,18 +205,23 @@ fig.update_layout(
         font=dict(size=25)
     ),
 
+    # 가로축
     xaxis=dict(
         title="연도",
+        range=[2007, 2026],
+        tickmode="linear",
+        tick0=2007,
         dtick=1,
-        tickformat="d",
         showgrid=True
     ),
 
+    # 세로축
     yaxis=dict(
         title="온도(℃)",
         showgrid=True
     ),
 
+    # 범례
     legend=dict(
         title="기온 구분",
         orientation="h",
@@ -195,8 +231,13 @@ fig.update_layout(
         x=0.5
     ),
 
+    # 마우스를 올리면 데이터 표시
     hovermode="x unified",
+
+    # 그래프 배경
     template="plotly_white",
+
+    # 글꼴
     font=dict(
         family="Malgun Gothic, Arial, sans-serif",
         size=13
@@ -205,35 +246,63 @@ fig.update_layout(
     height=550
 )
 
-# --------------------------------
-# 9. 그래프 출력
-# --------------------------------
+# =====================================
+# 10. 그래프 출력
+# =====================================
 
-st.subheader(f"📊 {selected_month}월 연도별 기온 변화")
+st.subheader(
+    f"📊 {selected_month}월 연도별 기온 변화"
+)
 
 st.plotly_chart(
     fig,
     use_container_width=True
 )
 
-# --------------------------------
-# 10. 데이터 표 출력
-# --------------------------------
+# =====================================
+# 11. 기온 데이터 표
+# =====================================
 
-with st.expander("📋 기온 데이터 자세히 보기"):
+st.subheader("📋 연도별 기온 데이터")
 
-    result = month_df[
-        ["연도", "최고기온(℃)", "최저기온(℃)"]
-    ].copy()
+result = month_df[
+    ["연도", "최고기온(℃)", "최저기온(℃)"]
+].copy()
 
-    result["연도"] = result["연도"].astype(int)
+result["연도"] = result["연도"].astype(int)
 
-    st.dataframe(
-        result,
-        use_container_width=True,
-        hide_index=True
+st.dataframe(
+    result,
+    use_container_width=True,
+    hide_index=True
+)
+
+# =====================================
+# 12. 기온 통계
+# =====================================
+
+st.subheader("📈 선택한 월의 기온 통계")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric(
+        "평균 최고기온",
+        f"{month_df['최고기온(℃)'].mean():.1f}℃"
     )
+
+with col2:
+    st.metric(
+        "평균 최저기온",
+        f"{month_df['최저기온(℃)'].mean():.1f}℃"
+    )
+
+# =====================================
+# 13. 마무리
+# =====================================
 
 st.divider()
 
-st.caption("🌡️ 기온 데이터 분석 프로그램")
+st.caption(
+    "🌡️ 월별 기온분석 프로그램 | 2007년~2026년"
+)
