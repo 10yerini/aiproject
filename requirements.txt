@@ -3,7 +3,7 @@ streamlit
 folium
 
 
-
+scikit-learn
 pandas
 plotly
 numpy
