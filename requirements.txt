@@ -10,3 +10,4 @@ numpy
 streamlit
 pandas
 matplotlib
+koreanize-matplotlib
