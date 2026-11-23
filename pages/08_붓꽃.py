@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import koreanize_matplotlib
 from pathlib import Path
 
 from sklearn.neighbors import KNeighborsClassifier
@@ -10,34 +9,28 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
 
-# ==========================================
-# 1. 페이지 설정
-# ==========================================
+# =====================================
+# 1. PAGE SETTINGS
+# =====================================
 
 st.set_page_config(
-    page_title="아이리스 품종 예측",
+    page_title="Iris Flower Prediction",
     page_icon="🌸",
     layout="wide"
 )
 
-st.title("🌸 아이리스 품종 예측 프로그램")
-st.write("꽃잎의 길이와 너비를 입력하면 AI가 품종을 예측합니다.")
+st.title("🌸 Iris Flower Prediction")
+st.write(
+    "Enter petal length and width to predict "
+    "the iris flower species."
+)
 
 st.divider()
 
 
-# ==========================================
-# 2. 한글 폰트 설정 (중요!)
-# ==========================================
-
-# 나눔고딕 폰트 명시적 적용
-plt.rcParams["font.family"] = "NanumGothic"
-plt.rcParams["axes.unicode_minus"] = False
-
-
-# ==========================================
-# 3. CSV 파일 불러오기
-# ==========================================
+# =====================================
+# 2. LOAD CSV FILE
+# =====================================
 
 current_folder = Path(__file__).resolve().parent
 
@@ -47,10 +40,7 @@ if not file_path.exists():
     file_path = current_folder.parent / "Iris.csv"
 
 if not file_path.exists():
-    st.error(
-        "Iris.csv 파일을 찾을 수 없습니다. "
-        "pages 폴더의 상위 폴더에 CSV 파일을 넣어 주세요."
-    )
+    st.error("Iris.csv file not found.")
     st.stop()
 
 
@@ -66,83 +56,111 @@ def load_data(path):
 
     for encoding in encodings:
         try:
-            return pd.read_csv(path, encoding=encoding)
+            return pd.read_csv(
+                path,
+                encoding=encoding
+            )
         except UnicodeDecodeError:
             continue
 
-    raise ValueError("CSV 파일의 인코딩을 확인해 주세요.")
+    raise ValueError("Unable to read CSV encoding.")
 
 
 try:
     df = load_data(str(file_path))
 
 except Exception as e:
-    st.error(f"데이터 파일 오류: {e}")
+    st.error(f"File loading error: {e}")
     st.stop()
 
 
-# ==========================================
-# 4. 데이터 전처리
-# ==========================================
+# =====================================
+# 3. DATA PREPROCESSING
+# =====================================
 
 df.columns = df.columns.astype(str).str.strip()
 
-# 영어 컬럼명도 지원
-rename_dict = {
-    "PetalLengthCm": "꽃잎 길이",
-    "PetalWidthCm": "꽃잎 너비",
-    "Species": "품종",
-    "petal_length": "꽃잎 길이",
-    "petal_width": "꽃잎 너비",
-    "species": "품종"
+# Support Korean and English column names
+column_aliases = {
+    "petal_length": [
+        "PetalLengthCm",
+        "Petal Length",
+        "petal_length",
+        "꽃잎 길이"
+    ],
+    "petal_width": [
+        "PetalWidthCm",
+        "Petal Width",
+        "petal_width",
+        "꽃잎 너비"
+    ],
+    "species": [
+        "Species",
+        "species",
+        "품종"
+    ]
 }
+
+rename_dict = {}
+
+for standard, aliases in column_aliases.items():
+    for alias in aliases:
+        if alias in df.columns:
+            rename_dict[alias] = standard
+            break
 
 df = df.rename(columns=rename_dict)
 
 required_columns = [
-    "꽃잎 길이",
-    "꽃잎 너비",
-    "품종"
+    "petal_length",
+    "petal_width",
+    "species"
 ]
 
 if not all(col in df.columns for col in required_columns):
-    st.error("CSV 파일의 컬럼명을 확인해 주세요.")
-    st.write(df.columns.tolist())
+    st.error("Required CSV columns are missing.")
+    st.write("Available columns:", df.columns.tolist())
     st.stop()
 
-df["꽃잎 길이"] = pd.to_numeric(
-    df["꽃잎 길이"], errors="coerce"
+
+df["petal_length"] = pd.to_numeric(
+    df["petal_length"],
+    errors="coerce"
 )
 
-df["꽃잎 너비"] = pd.to_numeric(
-    df["꽃잎 너비"], errors="coerce"
+df["petal_width"] = pd.to_numeric(
+    df["petal_width"],
+    errors="coerce"
 )
 
-df = df.dropna(subset=required_columns).copy()
+df = df.dropna(
+    subset=required_columns
+).copy()
 
 if len(df) < 5:
-    st.error("학습 데이터가 5개 미만입니다.")
+    st.error("Not enough training data.")
     st.stop()
 
-X = df[["꽃잎 길이", "꽃잎 너비"]]
-y = df["품종"].astype(str)
+
+X = df[["petal_length", "petal_width"]]
+y = df["species"].astype(str)
 
 
-# ==========================================
-# 5. 품종 이름 한글 변환
-# ==========================================
+# =====================================
+# 4. SPECIES NAME
+# =====================================
 
-species_korean = {
-    "Iris-setosa": "세토사",
-    "Iris-versicolor": "버시컬러",
-    "Iris-virginica": "버지니카",
-    "setosa": "세토사",
-    "versicolor": "버시컬러",
-    "virginica": "버지니카"
+species_names = {
+    "Iris-setosa": "Setosa",
+    "Iris-versicolor": "Versicolor",
+    "Iris-virginica": "Virginica",
+    "setosa": "Setosa",
+    "versicolor": "Versicolor",
+    "virginica": "Virginica"
 }
 
-def korean_name(name):
-    return species_korean.get(name, name)
+def get_species_name(name):
+    return species_names.get(name, name)
 
 
 species_colors = {
@@ -155,20 +173,20 @@ species_colors = {
 }
 
 
-# ==========================================
-# 6. 데이터 입력 범위
-# ==========================================
+# =====================================
+# 5. INPUT RANGE
+# =====================================
 
-min_length = float(X["꽃잎 길이"].min())
-max_length = float(X["꽃잎 길이"].max())
+min_length = float(X["petal_length"].min())
+max_length = float(X["petal_length"].max())
 
-min_width = float(X["꽃잎 너비"].min())
-max_width = float(X["꽃잎 너비"].max())
+min_width = float(X["petal_width"].min())
+max_width = float(X["petal_width"].max())
 
 
-# ==========================================
-# 7. KNN 모델 학습
-# ==========================================
+# =====================================
+# 6. TRAIN KNN MODEL
+# =====================================
 
 model = make_pipeline(
     StandardScaler(),
@@ -178,40 +196,44 @@ model = make_pipeline(
 model.fit(X, y)
 
 
-# ==========================================
-# 8. 데이터 정보
-# ==========================================
+# =====================================
+# 7. DATA INFORMATION
+# =====================================
 
-st.subheader("📊 아이리스 데이터 정보")
+st.subheader("Dataset Information")
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric("전체 데이터", f"{len(df)}개")
+col1.metric(
+    "Total Samples",
+    f"{len(df)}"
+)
+
 col2.metric(
-    "꽃잎 길이 범위",
-    f"{min_length} ~ {max_length} cm"
+    "Petal Length Range",
+    f"{min_length} - {max_length} cm"
 )
+
 col3.metric(
-    "꽃잎 너비 범위",
-    f"{min_width} ~ {max_width} cm"
+    "Petal Width Range",
+    f"{min_width} - {max_width} cm"
 )
 
 
-# ==========================================
-# 9. 사용자 입력
-# ==========================================
+# =====================================
+# 8. USER INPUT
+# =====================================
 
 st.divider()
 
-st.subheader("✏️ 꽃잎 크기 입력하기")
+st.subheader("Enter Flower Measurements")
 
 st.info(
     f"""
-    입력 가능한 값의 범위를 확인하세요.
+    Available Input Ranges
 
-    🌷 꽃잎 길이: {min_length} ~ {max_length} cm
-
-    🌷 꽃잎 너비: {min_width} ~ {max_width} cm
+    - Petal Length: {min_length} - {max_length} cm
+    - Petal Width: {min_width} - {max_width} cm
     """
 )
 
@@ -220,10 +242,10 @@ col1, col2 = st.columns(2)
 with col1:
 
     petal_length = st.number_input(
-        "꽃잎 길이 (cm)",
+        "Petal Length (cm)",
         min_value=min_length,
         max_value=max_length,
-        value=5.0,
+        value=min(5.0, max_length),
         step=0.1,
         format="%.1f"
     )
@@ -231,27 +253,27 @@ with col1:
 with col2:
 
     petal_width = st.number_input(
-        "꽃잎 너비 (cm)",
+        "Petal Width (cm)",
         min_value=min_width,
         max_value=max_width,
-        value=1.5,
+        value=min(1.5, max_width),
         step=0.1,
         format="%.1f"
     )
 
 
-# ==========================================
-# 10. 품종 예측
-# ==========================================
+# =====================================
+# 9. PREDICTION
+# =====================================
 
 if st.button(
-    "🔍 아이리스 품종 예측하기",
+    "Predict Iris Species",
     use_container_width=True
 ):
 
     input_data = pd.DataFrame(
         [[petal_length, petal_width]],
-        columns=["꽃잎 길이", "꽃잎 너비"]
+        columns=["petal_length", "petal_width"]
     )
 
     prediction = model.predict(input_data)[0]
@@ -260,63 +282,66 @@ if st.button(
 
     st.divider()
 
-    st.subheader("🎉 예측 결과")
+    st.subheader("Prediction Result")
 
     st.success(
-        f"예측된 아이리스 품종은 "
-        f"{korean_name(prediction)}입니다!"
+        f"Predicted Species: {get_species_name(prediction)}"
     )
 
-    # ======================================
-    # 11. 예측 확률
-    # ======================================
 
-    st.subheader("📈 품종별 예측 확률")
+    # =================================
+    # 10. PREDICTION PROBABILITY
+    # =================================
+
+    st.subheader("Prediction Probability")
 
     probability_df = pd.DataFrame({
-        "품종": [
-            korean_name(name)
+        "Species": [
+            get_species_name(name)
             for name in model.classes_
         ],
-        "예측 확률 (%)": probabilities * 100
+        "Probability (%)": probabilities * 100
     })
 
     st.bar_chart(
-        probability_df.set_index("품종"),
-        y="예측 확률 (%)"
+        probability_df.set_index("Species"),
+        y="Probability (%)"
     )
 
     for _, row in probability_df.iterrows():
 
         st.write(
-            f"{row['품종']}: "
-            f"{row['예측 확률 (%)']:.1f}%"
+            f"{row['Species']}: "
+            f"{row['Probability (%)']:.1f}%"
         )
 
 
-    # ======================================
-    # 12. 산점도 그래프
-    # ======================================
+    # =================================
+    # 11. SCATTER PLOT
+    # =================================
 
     st.divider()
 
-    st.subheader("📍 아이리스 꽃잎 분포 그래프")
+    st.subheader("Iris Petal Distribution")
+
+    # Use English font settings
+    plt.rcParams["axes.unicode_minus"] = False
 
     fig, ax = plt.subplots(figsize=(11, 7))
 
-    # 품종별 데이터 표시
-    for species, group in df.groupby("품종"):
+    # Plot each species
+    for species, group in df.groupby("species"):
 
         ax.scatter(
-            group["꽃잎 길이"],
-            group["꽃잎 너비"],
+            group["petal_length"],
+            group["petal_width"],
             color=species_colors.get(species, "gray"),
-            label=korean_name(species),
+            label=get_species_name(species),
             alpha=0.65,
             s=65
         )
 
-    # 사용자 입력 위치: 노란색 별
+    # Highlight user input with yellow star
     ax.scatter(
         petal_length,
         petal_width,
@@ -325,13 +350,12 @@ if st.button(
         marker="*",
         s=500,
         linewidths=1.5,
-        label="내가 입력한 값",
+        label="Your Input",
         zorder=10
     )
 
-    # 입력 위치 안내
     ax.annotate(
-        "내가 입력한 위치",
+        "Your Input",
         (petal_length, petal_width),
         xytext=(12, 12),
         textcoords="offset points",
@@ -339,33 +363,26 @@ if st.button(
         fontweight="bold"
     )
 
-    # 그래프 제목 및 축 이름
     ax.set_title(
-        "아이리스 품종별 꽃잎 분포 그래프",
-        fontsize=17,
-        pad=20
+        "Iris Species Petal Distribution",
+        fontsize=17
     )
 
     ax.set_xlabel(
-        "꽃잎 길이 (cm)",
-        fontsize=13,
-        labelpad=10
+        "Petal Length (cm)",
+        fontsize=13
     )
 
     ax.set_ylabel(
-        "꽃잎 너비 (cm)",
-        fontsize=13,
-        labelpad=10
+        "Petal Width (cm)",
+        fontsize=13
     )
 
-    # 범례
     ax.legend(
-        title="아이리스 품종",
-        fontsize=11,
-        title_fontsize=12
+        title="Species",
+        fontsize=11
     )
 
-    # 격자
     ax.grid(
         True,
         alpha=0.3
@@ -373,63 +390,63 @@ if st.button(
 
     fig.tight_layout()
 
-    # Streamlit에 그래프 출력
     st.pyplot(fig)
 
     plt.close(fig)
 
 
-    # ======================================
-    # 13. KNN 알고리즘 설명
-    # ======================================
+    # =================================
+    # 12. ALGORITHM EXPLANATION
+    # =================================
 
     st.divider()
 
-    st.subheader("🧠 KNN 알고리즘 알아보기")
+    st.subheader("How Does KNN Work?")
 
     st.write(
         """
-        KNN은 K-최근접 이웃이라는 분류 알고리즘입니다.
+        KNN stands for K-Nearest Neighbors.
 
-        **① 사용자 입력**
+        **Step 1. Input**
 
-        사용자가 꽃잎 길이와 너비를 입력합니다.
+        Enter petal length and petal width.
 
-        **② 가까운 데이터 찾기**
+        **Step 2. Find Neighbors**
 
-        기존 아이리스 데이터 중 입력값과 가장 가까운
-        데이터 5개를 찾습니다.
+        The algorithm finds the 5 closest samples
+        in the Iris dataset.
 
-        **③ 품종 비교**
+        **Step 3. Compare Species**
 
-        가까운 데이터 5개의 품종을 비교합니다.
+        It compares the species of the 5 neighbors.
 
-        **④ 최종 예측**
+        **Step 4. Prediction**
 
-        가장 많이 등장한 품종을 최종 결과로 선택합니다.
+        The most frequently appearing species
+        becomes the final prediction.
         """
     )
 
     st.caption(
-        "※ 예측 확률은 가까운 데이터 5개 중 "
-        "각 품종이 차지하는 비율입니다."
+        "Prediction probabilities represent the proportion "
+        "of each species among the 5 nearest neighbors."
     )
 
 else:
 
     st.info(
-        "꽃잎 길이와 너비를 입력하고 "
-        "예측하기 버튼을 눌러 주세요."
+        "Enter the measurements and click "
+        "'Predict Iris Species'."
     )
 
 
-# ==========================================
-# 14. 하단 안내
-# ==========================================
+# =====================================
+# 13. FOOTER
+# =====================================
 
 st.divider()
 
 st.caption(
-    "🌸 아이리스 품종 예측 프로그램 | "
+    "Iris Flower Prediction | "
     "Pandas + Scikit-learn + Streamlit"
 )
