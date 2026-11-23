@@ -20,6 +20,7 @@ st.set_page_config(
 )
 
 st.title("🌸 Iris Flower Prediction")
+
 st.write(
     "Enter petal length and width to predict "
     "the iris flower species."
@@ -80,7 +81,6 @@ except Exception as e:
 
 df.columns = df.columns.astype(str).str.strip()
 
-# Support Korean and English column names
 column_aliases = {
     "petal_length": [
         "PetalLengthCm",
@@ -122,7 +122,6 @@ if not all(col in df.columns for col in required_columns):
     st.write("Available columns:", df.columns.tolist())
     st.stop()
 
-
 df["petal_length"] = pd.to_numeric(
     df["petal_length"],
     errors="coerce"
@@ -140,7 +139,6 @@ df = df.dropna(
 if len(df) < 5:
     st.error("Not enough training data.")
     st.stop()
-
 
 X = df[["petal_length", "petal_width"]]
 y = df["species"].astype(str)
@@ -188,9 +186,11 @@ max_width = float(X["petal_width"].max())
 # 6. TRAIN KNN MODEL
 # =====================================
 
+K = 5
+
 model = make_pipeline(
     StandardScaler(),
-    KNeighborsClassifier(n_neighbors=5)
+    KNeighborsClassifier(n_neighbors=K)
 )
 
 model.fit(X, y)
@@ -280,6 +280,55 @@ if st.button(
 
     probabilities = model.predict_proba(input_data)[0]
 
+    # Find nearest 5 samples
+    knn = model.named_steps["kneighborsclassifier"]
+    scaler = model.named_steps["standardscaler"]
+
+    scaled_input = scaler.transform(input_data)
+    scaled_X = scaler.transform(X)
+
+    distances, indices = knn.kneighbors(
+        scaled_input
+    )
+
+    nearest_data = df.iloc[indices[0]].copy()
+
+    nearest_data["Distance"] = distances[0]
+
+    nearest_data["Species Name"] = (
+        nearest_data["species"].map(get_species_name)
+    )
+
+    st.divider()
+
+    # =================================
+    # 10. ALGORITHM INFORMATION
+    # =================================
+
+    st.subheader("🤖 Machine Learning Algorithm")
+
+    st.success(
+        "Algorithm Used: K-Nearest Neighbors (KNN)"
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Algorithm", "KNN")
+    col2.metric("Nearest Neighbors (K)", K)
+    col3.metric("Features Used", "2")
+
+    st.write(
+        """
+        KNN is a classification algorithm that predicts
+        a new sample by comparing it with similar samples
+        in the existing dataset.
+        """
+    )
+
+    # =================================
+    # 11. PREDICTION RESULT
+    # =================================
+
     st.divider()
 
     st.subheader("Prediction Result")
@@ -288,10 +337,58 @@ if st.button(
         f"Predicted Species: {get_species_name(prediction)}"
     )
 
+    st.write(
+        f"Your Input: Petal Length = {petal_length} cm, "
+        f"Petal Width = {petal_width} cm"
+    )
 
     # =================================
-    # 10. PREDICTION PROBABILITY
+    # 12. NEAREST 5 DATA
     # =================================
+
+    st.subheader("🔎 The 5 Nearest Neighbors")
+
+    result_table = nearest_data[
+        [
+            "petal_length",
+            "petal_width",
+            "Species Name",
+            "Distance"
+        ]
+    ].copy()
+
+    result_table.columns = [
+        "Petal Length (cm)",
+        "Petal Width (cm)",
+        "Species",
+        "Distance"
+    ]
+
+    result_table.index = range(1, K + 1)
+
+    st.dataframe(
+        result_table.round(3),
+        use_container_width=True
+    )
+
+    # Count species among neighbors
+    neighbor_counts = nearest_data[
+        "Species Name"
+    ].value_counts()
+
+    st.write("Voting Results")
+
+    for species, count in neighbor_counts.items():
+
+        st.write(
+            f"{species}: {count} out of {K} neighbors"
+        )
+
+    # =================================
+    # 13. PREDICTION PROBABILITY
+    # =================================
+
+    st.divider()
 
     st.subheader("Prediction Probability")
 
@@ -308,28 +405,16 @@ if st.button(
         y="Probability (%)"
     )
 
-    for _, row in probability_df.iterrows():
-
-        st.write(
-            f"{row['Species']}: "
-            f"{row['Probability (%)']:.1f}%"
-        )
-
-
     # =================================
-    # 11. SCATTER PLOT
+    # 14. SCATTER PLOT
     # =================================
 
     st.divider()
 
     st.subheader("Iris Petal Distribution")
 
-    # Use English font settings
-    plt.rcParams["axes.unicode_minus"] = False
-
     fig, ax = plt.subplots(figsize=(11, 7))
 
-    # Plot each species
     for species, group in df.groupby("species"):
 
         ax.scatter(
@@ -341,7 +426,7 @@ if st.button(
             s=65
         )
 
-    # Highlight user input with yellow star
+    # User input
     ax.scatter(
         petal_length,
         petal_width,
@@ -378,15 +463,8 @@ if st.button(
         fontsize=13
     )
 
-    ax.legend(
-        title="Species",
-        fontsize=11
-    )
-
-    ax.grid(
-        True,
-        alpha=0.3
-    )
+    ax.legend(title="Species")
+    ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
 
@@ -394,42 +472,70 @@ if st.button(
 
     plt.close(fig)
 
-
     # =================================
-    # 12. ALGORITHM EXPLANATION
+    # 15. EASY ALGORITHM EXPLANATION
     # =================================
 
     st.divider()
 
-    st.subheader("How Does KNN Work?")
+    st.subheader("🧠 How Does KNN Work?")
 
     st.write(
         """
         KNN stands for K-Nearest Neighbors.
 
-        **Step 1. Input**
+        It predicts a flower species by finding
+        the 5 most similar flowers in the dataset.
+        """
+    )
 
-        Enter petal length and petal width.
+    st.markdown(
+        """
+        ### Step 1. Enter the measurements
 
-        **Step 2. Find Neighbors**
+        You enter the petal length and petal width
+        of a flower.
 
-        The algorithm finds the 5 closest samples
-        in the Iris dataset.
+        ### Step 2. Find similar flowers
 
-        **Step 3. Compare Species**
+        The computer compares your input with
+        all flowers in the training dataset.
 
-        It compares the species of the 5 neighbors.
+        ### Step 3. Find the 5 closest flowers
 
-        **Step 4. Prediction**
+        KNN selects the 5 flowers that have
+        the smallest distance from your input.
 
-        The most frequently appearing species
-        becomes the final prediction.
+        ### Step 4. Vote for the species
+
+        The 5 flowers vote for their species.
+        The species with the most votes wins.
+
+        ### Step 5. Show the prediction
+
+        The computer displays the species
+        with the most votes as the final prediction.
+        """
+    )
+
+    st.info(
+        f"""
+        Example:
+
+        If the 5 nearest flowers are:
+
+        - Setosa: 1 flower
+        - Versicolor: 4 flowers
+        - Virginica: 0 flowers
+
+        The prediction is Versicolor because
+        it received the most votes.
         """
     )
 
     st.caption(
-        "Prediction probabilities represent the proportion "
-        "of each species among the 5 nearest neighbors."
+        "Note: KNN uses standardized petal measurements "
+        "to calculate distances."
     )
 
 else:
@@ -441,7 +547,7 @@ else:
 
 
 # =====================================
-# 13. FOOTER
+# 16. FOOTER
 # =====================================
 
 st.divider()
