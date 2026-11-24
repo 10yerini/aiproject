@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import koreanize_matplotlib
 from pathlib import Path
 
 from sklearn.neighbors import KNeighborsClassifier
@@ -12,88 +13,102 @@ from sklearn.pipeline import make_pipeline
 
 
 # ==========================================
-# 1. PAGE SETTINGS
+# 1. 페이지 설정
 # ==========================================
 
 st.set_page_config(
-    page_title="Iris AI Classifier",
+    page_title="아이리스 인공지능 품종 예측",
     page_icon="🌸",
     layout="wide"
 )
 
-st.title("🌸 Iris Flower AI Classification")
+st.title("🌸 아이리스 인공지능 품종 예측")
 st.write(
-    "Compare three machine learning algorithms "
-    "to predict iris flower species."
+    "꽃잎의 길이와 너비를 입력하고 "
+    "세 가지 머신러닝 알고리즘으로 품종을 예측해 보세요."
 )
 
 st.divider()
 
 
 # ==========================================
-# 2. LOAD CSV FILE
+# 2. 한글 그래프 폰트 설정
 # ==========================================
 
-current_folder = Path(__file__).resolve().parent
+plt.rcParams["axes.unicode_minus"] = False
 
-file_path = current_folder / "Iris.csv"
 
-if not file_path.exists():
-    file_path = current_folder.parent / "Iris.csv"
+# ==========================================
+# 3. CSV 파일 불러오기
+# ==========================================
 
-if not file_path.exists():
-    st.error("Iris.csv file not found.")
+현재폴더 = Path(__file__).resolve().parent
+
+파일경로 = 현재폴더 / "Iris.csv"
+
+if not 파일경로.exists():
+    파일경로 = 현재폴더.parent / "Iris.csv"
+
+if not 파일경로.exists():
+    st.error(
+        "Iris.csv 파일을 찾을 수 없습니다. "
+        "pages 폴더의 상위 폴더에 CSV 파일을 넣어 주세요."
+    )
     st.stop()
 
 
 @st.cache_data
-def load_data(path):
+def 데이터불러오기(경로):
 
-    encodings = [
+    인코딩목록 = [
         "cp949",
         "utf-8-sig",
         "utf-8",
         "euc-kr"
     ]
 
-    for encoding in encodings:
+    for 인코딩 in 인코딩목록:
         try:
             return pd.read_csv(
-                path,
-                encoding=encoding
+                경로,
+                encoding=인코딩
             )
         except UnicodeDecodeError:
             continue
 
-    raise ValueError("Unable to read CSV file.")
+    raise ValueError("CSV 파일의 인코딩을 확인해 주세요.")
 
 
 try:
-    df = load_data(str(file_path))
+    df = 데이터불러오기(str(파일경로))
 
 except Exception as e:
-    st.error(f"File loading error: {e}")
+    st.error(f"데이터 파일 오류: {e}")
     st.stop()
 
 
 # ==========================================
-# 3. DATA PREPROCESSING
+# 4. 데이터 전처리
 # ==========================================
 
 df.columns = df.columns.astype(str).str.strip()
 
-column_aliases = {
+컬럼이름변경 = {}
+
+컬럼별칭 = {
     "petal_length": [
         "PetalLengthCm",
         "Petal Length",
         "petal_length",
-        "꽃잎 길이"
+        "꽃잎 길이",
+        "꽃잎길이"
     ],
     "petal_width": [
         "PetalWidthCm",
         "Petal Width",
         "petal_width",
-        "꽃잎 너비"
+        "꽃잎 너비",
+        "꽃잎너비"
     ],
     "species": [
         "Species",
@@ -102,25 +117,23 @@ column_aliases = {
     ]
 }
 
-rename_dict = {}
-
-for standard, aliases in column_aliases.items():
-    for alias in aliases:
-        if alias in df.columns:
-            rename_dict[alias] = standard
+for 표준이름, 별칭목록 in 컬럼별칭.items():
+    for 별칭 in 별칭목록:
+        if 별칭 in df.columns:
+            컬럼이름변경[별칭] = 표준이름
             break
 
-df = df.rename(columns=rename_dict)
+df = df.rename(columns=컬럼이름변경)
 
-required_columns = [
+필수컬럼 = [
     "petal_length",
     "petal_width",
     "species"
 ]
 
-if not all(col in df.columns for col in required_columns):
-    st.error("Required CSV columns are missing.")
-    st.write("Available columns:", df.columns.tolist())
+if not all(컬럼 in df.columns for 컬럼 in 필수컬럼):
+    st.error("CSV 파일의 컬럼명을 확인해 주세요.")
+    st.write("현재 컬럼:", df.columns.tolist())
     st.stop()
 
 df["petal_length"] = pd.to_numeric(
@@ -134,11 +147,11 @@ df["petal_width"] = pd.to_numeric(
 )
 
 df = df.dropna(
-    subset=required_columns
+    subset=필수컬럼
 ).copy()
 
 if len(df) < 5:
-    st.error("Not enough training data.")
+    st.error("학습에 필요한 데이터가 부족합니다.")
     st.stop()
 
 X = df[["petal_length", "petal_width"]]
@@ -146,24 +159,24 @@ y = df["species"].astype(str)
 
 
 # ==========================================
-# 4. SPECIES NAME
+# 5. 품종 이름 한글 변환
 # ==========================================
 
-species_names = {
-    "Iris-setosa": "Setosa",
-    "Iris-versicolor": "Versicolor",
-    "Iris-virginica": "Virginica",
-    "setosa": "Setosa",
-    "versicolor": "Versicolor",
-    "virginica": "Virginica"
+품종이름 = {
+    "Iris-setosa": "세토사",
+    "Iris-versicolor": "버시컬러",
+    "Iris-virginica": "버지니카",
+    "setosa": "세토사",
+    "versicolor": "버시컬러",
+    "virginica": "버지니카"
 }
 
 
-def get_species_name(name):
-    return species_names.get(name, name)
+def 품종한글(이름):
+    return 품종이름.get(이름, 이름)
 
 
-species_colors = {
+품종색상 = {
     "Iris-setosa": "blue",
     "Iris-versicolor": "green",
     "Iris-virginica": "red",
@@ -174,33 +187,35 @@ species_colors = {
 
 
 # ==========================================
-# 5. INPUT RANGE
+# 6. 입력 가능한 범위
 # ==========================================
 
-min_length = float(X["petal_length"].min())
-max_length = float(X["petal_length"].max())
+최소길이 = float(X["petal_length"].min())
+최대길이 = float(X["petal_length"].max())
 
-min_width = float(X["petal_width"].min())
-max_width = float(X["petal_width"].max())
+최소너비 = float(X["petal_width"].min())
+최대너비 = float(X["petal_width"].max())
 
 
 # ==========================================
-# 6. CREATE THREE MODELS
+# 7. 세 가지 알고리즘 만들기
 # ==========================================
 
-models = {
+K = 5
+
+모델들 = {
 
     "KNN": make_pipeline(
         StandardScaler(),
-        KNeighborsClassifier(n_neighbors=5)
+        KNeighborsClassifier(n_neighbors=K)
     ),
 
-    "Decision Tree": DecisionTreeClassifier(
+    "의사결정나무": DecisionTreeClassifier(
         max_depth=4,
         random_state=42
     ),
 
-    "Random Forest": RandomForestClassifier(
+    "랜덤 포레스트": RandomForestClassifier(
         n_estimators=100,
         max_depth=4,
         random_state=42
@@ -210,284 +225,325 @@ models = {
 
 
 # ==========================================
-# 7. TRAIN ALL MODELS
+# 8. 세 가지 알고리즘 학습
 # ==========================================
 
-for model in models.values():
-    model.fit(X, y)
+for 모델 in 모델들.values():
+    모델.fit(X, y)
 
 
 # ==========================================
-# 8. DATA INFORMATION
+# 9. 데이터 정보
 # ==========================================
 
-st.subheader("Dataset Information")
+st.subheader("📊 아이리스 데이터 정보")
 
-col1, col2, col3 = st.columns(3)
+열1, 열2, 열3 = st.columns(3)
 
-col1.metric(
-    "Total Samples",
-    len(df)
+열1.metric(
+    "전체 데이터",
+    f"{len(df)}개"
 )
 
-col2.metric(
-    "Number of Species",
-    y.nunique()
+열2.metric(
+    "꽃 품종",
+    f"{y.nunique()}종"
 )
 
-col3.metric(
-    "Algorithms",
-    "3"
+열3.metric(
+    "분류 알고리즘",
+    "3개"
 )
 
 st.divider()
 
 
 # ==========================================
-# 9. USER INPUT
+# 10. 사용자 입력
 # ==========================================
 
-st.subheader("Enter Flower Measurements")
+st.subheader("✏️ 꽃잎 크기 입력하기")
 
 st.info(
     f"""
-    Available Input Ranges
+    입력 가능한 값의 범위
 
-    - Petal Length: {min_length} - {max_length} cm
-    - Petal Width: {min_width} - {max_width} cm
+    🌷 꽃잎 길이: {최소길이} ~ {최대길이} cm
+
+    🌷 꽃잎 너비: {최소너비} ~ {최대너비} cm
     """
 )
 
-col1, col2 = st.columns(2)
+열1, 열2 = st.columns(2)
 
-with col1:
+with 열1:
 
-    petal_length = st.number_input(
-        "Petal Length (cm)",
-        min_value=min_length,
-        max_value=max_length,
-        value=min(5.0, max_length),
+    꽃잎길이 = st.number_input(
+        "꽃잎 길이 (cm)",
+        min_value=최소길이,
+        max_value=최대길이,
+        value=min(5.0, 최대길이),
         step=0.1,
         format="%.1f"
     )
 
-with col2:
+with 열2:
 
-    petal_width = st.number_input(
-        "Petal Width (cm)",
-        min_value=min_width,
-        max_value=max_width,
-        value=min(1.5, max_width),
+    꽃잎너비 = st.number_input(
+        "꽃잎 너비 (cm)",
+        min_value=최소너비,
+        max_value=최대너비,
+        value=min(1.5, 최대너비),
         step=0.1,
         format="%.1f"
     )
 
 
 # ==========================================
-# 10. SELECT ALGORITHM
+# 11. 알고리즘 선택
 # ==========================================
 
 st.divider()
 
-st.subheader("🤖 Select Machine Learning Algorithm")
+st.subheader("🤖 예측 알고리즘 선택")
 
-selected_algorithm = st.selectbox(
-    "Choose an algorithm",
+선택알고리즘 = st.selectbox(
+    "사용할 분류 알고리즘을 선택하세요.",
     [
         "KNN",
-        "Decision Tree",
-        "Random Forest"
+        "의사결정나무",
+        "랜덤 포레스트"
     ]
 )
 
-algorithm_descriptions = {
-    "KNN": "Finds the 5 closest flowers and predicts by voting.",
-    "Decision Tree": "Uses a sequence of conditions to classify flowers.",
-    "Random Forest": "Combines 100 decision trees to make a prediction."
+알고리즘설명 = {
+    "KNN": "가장 가까운 데이터 5개를 찾아 다수결로 품종을 결정합니다.",
+    "의사결정나무": "꽃잎의 길이와 너비에 관한 여러 조건을 차례대로 확인합니다.",
+    "랜덤 포레스트": "100개의 의사결정나무가 각각 예측한 결과를 종합합니다."
 }
 
 st.info(
-    algorithm_descriptions[selected_algorithm]
+    f"선택한 알고리즘: {선택알고리즘}\n\n"
+    f"{알고리즘설명[선택알고리즘]}"
 )
 
 
 # ==========================================
-# 11. PREDICTION BUTTON
+# 12. 예측 및 비교 버튼
 # ==========================================
 
 if st.button(
-    "Predict and Compare Algorithms",
+    "🔍 품종 예측 및 알고리즘 비교하기",
     use_container_width=True
 ):
 
-    input_data = pd.DataFrame(
-        [[petal_length, petal_width]],
+    입력데이터 = pd.DataFrame(
+        [[꽃잎길이, 꽃잎너비]],
         columns=["petal_length", "petal_width"]
     )
 
-    # --------------------------------------
-    # Predict using all three algorithms
-    # --------------------------------------
+    예측결과 = {}
+    확률결과 = {}
+    비교자료 = []
 
-    predictions = {}
-    probability_results = {}
-    comparison_rows = []
+    # 세 알고리즘 모두 예측
+    for 이름, 모델 in 모델들.items():
 
-    for name, model in models.items():
+        예측 = 모델.predict(입력데이터)[0]
 
-        prediction = model.predict(input_data)[0]
+        확률 = 모델.predict_proba(입력데이터)[0]
 
-        probabilities = model.predict_proba(
-            input_data
-        )[0]
+        예측결과[이름] = 예측
+        확률결과[이름] = 확률
 
-        predictions[name] = prediction
-
-        probability_results[name] = probabilities
-
-        confidence = max(probabilities) * 100
-
-        comparison_rows.append({
-            "Algorithm": name,
-            "Predicted Species": get_species_name(prediction),
-            "Confidence (%)": round(confidence, 1)
+        비교자료.append({
+            "알고리즘": 이름,
+            "예측 품종": 품종한글(예측),
+            "최고 예측 확률(%)": round(
+                max(확률) * 100, 1
+            )
         })
 
 
     # ======================================
-    # 12. SELECTED ALGORITHM RESULT
+    # 13. 선택한 알고리즘의 예측 결과
     # ======================================
 
     st.divider()
 
-    st.subheader("Selected Algorithm Result")
+    st.subheader("🎯 선택한 알고리즘의 예측 결과")
 
-    selected_prediction = predictions[selected_algorithm]
+    선택예측 = 예측결과[선택알고리즘]
 
     st.success(
         f"""
-        Selected Algorithm: {selected_algorithm}
+        사용 알고리즘: {선택알고리즘}
 
-        Predicted Species: {get_species_name(selected_prediction)}
+        예측된 아이리스 품종: {품종한글(선택예측)}
         """
     )
 
     st.write(
-        f"Petal Length: {petal_length} cm | "
-        f"Petal Width: {petal_width} cm"
-    )
-
-
-    # ======================================
-    # 13. COMPARE THREE ALGORITHMS
-    # ======================================
-
-    st.divider()
-
-    st.subheader("📊 Compare Three Algorithms")
-
-    comparison_df = pd.DataFrame(comparison_rows)
-
-    st.dataframe(
-        comparison_df,
-        use_container_width=True,
-        hide_index=True
+        f"입력한 꽃잎 길이: {꽃잎길이} cm"
     )
 
     st.write(
-        "All three algorithms predict the same input data. "
-        "Compare their predicted species and confidence values."
-    )
-
-    # ======================================
-    # 14. SPECIES PROBABILITY COMPARISON
-    # ======================================
-
-    st.subheader("Species Probability Comparison")
-
-    probability_rows = []
-
-    for name in models.keys():
-
-        classes = models[name].classes_
-
-        row = {
-            "Algorithm": name
-        }
-
-        for species, probability in zip(
-            classes,
-            probability_results[name]
-        ):
-
-            row[get_species_name(species)] = round(
-                probability * 100, 1
-            )
-
-        probability_rows.append(row)
-
-    probability_df = pd.DataFrame(probability_rows)
-
-    st.dataframe(
-        probability_df,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.caption(
-        "Note: Confidence values are model probability estimates. "
-        "Their interpretation differs by algorithm."
+        f"입력한 꽃잎 너비: {꽃잎너비} cm"
     )
 
 
     # ======================================
-    # 15. PROBABILITY CHART
-    # ======================================
-
-    st.subheader("Prediction Probability Chart")
-
-    chart_df = probability_df.set_index("Algorithm")
-
-    st.bar_chart(chart_df)
-
-
-    # ======================================
-    # 16. SCATTER PLOT
+    # 14. 세 알고리즘 결과 비교
     # ======================================
 
     st.divider()
 
-    st.subheader("Iris Petal Distribution")
+    st.subheader("📊 세 가지 알고리즘 예측 결과 비교")
+
+    비교df = pd.DataFrame(비교자료)
+
+    st.dataframe(
+        비교df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.write("각 알고리즘이 같은 입력값을 어떻게 예측했는지 확인해 보세요.")
+
+    # ======================================
+    # 15. 품종별 예측 확률 비교
+    # ======================================
+
+    st.subheader("📈 알고리즘별 품종 예측 확률")
+
+    확률자료 = []
+
+    for 이름 in 모델들.keys():
+
+        행 = {
+            "알고리즘": 이름
+        }
+
+        for 품종, 확률 in zip(
+            모델들[이름].classes_,
+            확률결과[이름]
+        ):
+
+            행[품종한글(품종)] = round(
+                확률 * 100, 1
+            )
+
+        확률자료.append(행)
+
+    확률df = pd.DataFrame(확률자료)
+
+    st.dataframe(
+        확률df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.bar_chart(
+        확률df.set_index("알고리즘")
+    )
+
+    st.caption(
+        "※ 예측 확률은 알고리즘별 내부 확률 추정치이며 "
+        "실제 정확도와 동일한 의미는 아닙니다."
+    )
+
+
+    # ======================================
+    # 16. KNN 가장 가까운 데이터 5개
+    # ======================================
+
+    if 선택알고리즘 == "KNN":
+
+        st.divider()
+
+        st.subheader("🔎 가장 가까운 데이터 5개")
+
+        knn = 모델들["KNN"].named_steps[
+            "kneighborsclassifier"
+        ]
+
+        scaler = 모델들["KNN"].named_steps[
+            "standardscaler"
+        ]
+
+        거리, 인덱스 = knn.kneighbors(
+            scaler.transform(입력데이터)
+        )
+
+        가까운자료 = df.iloc[인덱스[0]].copy()
+
+        가까운자료["거리"] = 거리[0]
+
+        가까운자료["품종"] = (
+            가까운자료["species"].map(품종한글)
+        )
+
+        가까운자료 = 가까운자료[
+            [
+                "petal_length",
+                "petal_width",
+                "품종",
+                "거리"
+            ]
+        ]
+
+        가까운자료.columns = [
+            "꽃잎 길이",
+            "꽃잎 너비",
+            "품종",
+            "거리"
+        ]
+
+        가까운자료.index = range(1, K + 1)
+
+        st.dataframe(
+            가까운자료.round(3),
+            use_container_width=True
+        )
+
+
+    # ======================================
+    # 17. 꽃잎 분포 그래프
+    # ======================================
+
+    st.divider()
+
+    st.subheader("📍 아이리스 꽃잎 분포 그래프")
 
     fig, ax = plt.subplots(figsize=(11, 7))
 
-    for species, group in df.groupby("species"):
+    for 품종, 그룹 in df.groupby("species"):
 
         ax.scatter(
-            group["petal_length"],
-            group["petal_width"],
-            color=species_colors.get(species, "gray"),
-            label=get_species_name(species),
+            그룹["petal_length"],
+            그룹["petal_width"],
+            color=품종색상.get(품종, "gray"),
+            label=품종한글(품종),
             alpha=0.65,
             s=65
         )
 
-    # User input as yellow star
+    # 사용자 입력값 노란색 별표
     ax.scatter(
-        petal_length,
-        petal_width,
+        꽃잎길이,
+        꽃잎너비,
         color="yellow",
         edgecolors="black",
         marker="*",
         s=500,
         linewidths=1.5,
-        label="Your Input",
+        label="사용자 입력값",
         zorder=10
     )
 
     ax.annotate(
-        "Your Input",
-        (petal_length, petal_width),
+        "사용자 입력값",
+        (꽃잎길이, 꽃잎너비),
         xytext=(12, 12),
         textcoords="offset points",
         fontsize=11,
@@ -495,22 +551,27 @@ if st.button(
     )
 
     ax.set_title(
-        "Iris Species Petal Distribution",
-        fontsize=17
+        "아이리스 품종별 꽃잎 분포",
+        fontsize=17,
+        pad=20
     )
 
     ax.set_xlabel(
-        "Petal Length (cm)",
+        "꽃잎 길이 (cm)",
         fontsize=13
     )
 
     ax.set_ylabel(
-        "Petal Width (cm)",
+        "꽃잎 너비 (cm)",
         fontsize=13
     )
 
-    ax.legend(title="Species")
-    ax.grid(True, alpha=0.3)
+    ax.legend(title="아이리스 품종")
+
+    ax.grid(
+        True,
+        alpha=0.3
+    )
 
     fig.tight_layout()
 
@@ -520,185 +581,208 @@ if st.button(
 
 
     # ======================================
-    # 17. ALGORITHM EXPLANATIONS
+    # 18. 알고리즘 작동 원리 설명
     # ======================================
 
     st.divider()
 
-    st.header("🧠 How Do the Three Algorithms Work?")
+    st.header("🧠 세 가지 분류 알고리즘 작동 원리")
 
     # --------------------------------------
     # KNN
     # --------------------------------------
 
-    st.subheader("1. KNN (K-Nearest Neighbors)")
+    with st.expander(
+        "1. KNN (K-최근접 이웃)",
+        expanded=True
+    ):
 
-    st.write(
-        """
-        KNN predicts a flower by looking at the
-        5 most similar flowers in the existing dataset.
-        """
-    )
+        st.write(
+            """
+            **핵심 원리: 나와 가장 비슷한 이웃을 찾아보는 방법**
+            """
+        )
 
-    st.markdown(
-        """
-        **How it works:**
+        st.markdown(
+            """
+            ① 사용자가 꽃잎 길이와 너비를 입력합니다.
 
-        1. Receive the user's petal length and width.
-        2. Calculate the distance between the input and existing flowers.
-        3. Find the 5 closest flowers.
-        4. Count the species of those 5 flowers.
-        5. Predict the species with the most votes.
+            ② 기존 아이리스 데이터와 입력값 사이의 거리를 계산합니다.
 
-        **Easy example:**
+            ③ 거리가 가장 가까운 데이터 5개를 찾습니다.
 
-        Suppose the 5 closest flowers are:
+            ④ 가까운 데이터 5개의 품종을 확인합니다.
 
-        - Setosa: 1
-        - Versicolor: 4
-        - Virginica: 0
+            ⑤ 가장 많이 등장한 품종을 최종 결과로 선택합니다.
+            """
+        )
 
-        The final prediction is Versicolor.
-        """
-    )
+        st.info(
+            """
+            쉬운 예시
 
-    st.info(
-        "KNN is like asking your 5 closest neighbors "
-        "which flower looks most similar."
-    )
+            가까운 꽃 5개의 품종이 다음과 같다고 가정해 봅시다.
+
+            - 세토사: 1개
+            - 버시컬러: 4개
+            - 버지니카: 0개
+
+            가장 많은 표를 받은 버시컬러로 예측합니다.
+            """
+        )
+
+        st.write(
+            "**비유:** 주변에서 나와 가장 비슷한 친구 5명에게 "
+            "의견을 물어보고 가장 많은 의견을 따르는 방법입니다."
+        )
+
 
     # --------------------------------------
     # Decision Tree
     # --------------------------------------
 
-    st.subheader("2. Decision Tree")
+    with st.expander(
+        "2. 의사결정나무 (Decision Tree)"
+    ):
 
-    st.write(
-        """
-        A Decision Tree predicts a species by following
-        a series of questions and conditions.
-        """
-    )
+        st.write(
+            """
+            **핵심 원리: 여러 가지 질문과 조건을 따라가는 방법**
+            """
+        )
 
-    st.markdown(
-        """
-        **How it works:**
+        st.markdown(
+            """
+            ① 꽃잎 길이와 너비를 확인합니다.
 
-        1. Look at the petal measurements.
-        2. Check a condition, such as whether petal length
-           is smaller or larger than a certain value.
-        3. Follow the appropriate branch.
-        4. Continue checking conditions.
-        5. Reach a final group and predict its most common species.
+            ② 꽃잎 길이가 특정 기준보다 작은지 큰지 확인합니다.
 
-        **Easy example:**
+            ③ 조건에 따라 다음 질문으로 이동합니다.
 
-        - Is petal length small?
-        - Is petal width small?
-        - Follow the answers to the next question.
-        - Reach the final species prediction.
-        """
-    )
+            ④ 여러 가지 조건을 차례대로 확인합니다.
 
-    st.info(
-        "A Decision Tree works like a questionnaire "
-        "that asks questions one by one."
-    )
+            ⑤ 마지막 단계에 도달하면 품종을 예측합니다.
+            """
+        )
+
+        st.info(
+            """
+            쉬운 예시
+
+            - 꽃잎 길이가 짧은가요?
+            - 꽃잎 너비가 작은가요?
+            - 조건에 따라 다음 단계로 이동합니다.
+            - 마지막에 해당하는 품종을 예측합니다.
+            """
+        )
+
+        st.write(
+            "**비유:** 스무고개처럼 질문에 답하면서 "
+            "정답을 찾아가는 방법입니다."
+        )
+
 
     # --------------------------------------
     # Random Forest
     # --------------------------------------
 
-    st.subheader("3. Random Forest")
+    with st.expander(
+        "3. 랜덤 포레스트 (Random Forest)"
+    ):
 
-    st.write(
-        """
-        Random Forest combines many Decision Trees
-        to make one final prediction.
-        """
-    )
+        st.write(
+            """
+            **핵심 원리: 여러 의사결정나무의 의견을 모으는 방법**
+            """
+        )
 
-    st.markdown(
-        """
-        **How it works:**
+        st.markdown(
+            """
+            ① 여러 개의 학습용 데이터를 이용해 의사결정나무를 만듭니다.
 
-        1. Create many Decision Trees using different
-           samples and feature selections.
-        2. Each tree makes its own prediction.
-        3. Collect the predictions from all trees.
-        4. Count how many trees voted for each species.
-        5. Predict the species with the most votes.
+            ② 각 의사결정나무가 독립적으로 품종을 예측합니다.
 
-        **Easy example:**
+            ③ 모든 나무의 예측 결과를 모읍니다.
 
-        Suppose 100 trees predict:
+            ④ 각 품종이 받은 표를 계산합니다.
 
-        - Setosa: 10 votes
-        - Versicolor: 75 votes
-        - Virginica: 15 votes
+            ⑤ 가장 많은 표를 받은 품종을 최종 결과로 선택합니다.
+            """
+        )
 
-        The final prediction is Versicolor.
-        """
-    )
+        st.info(
+            """
+            쉬운 예시
 
-    st.info(
-        "Random Forest is like asking 100 experts "
-        "and choosing the answer with the most votes."
-    )
+            의사결정나무 100개가 다음과 같이 투표했다고 가정해 봅시다.
+
+            - 세토사: 10표
+            - 버시컬러: 75표
+            - 버지니카: 15표
+
+            가장 많은 표를 받은 버시컬러로 예측합니다.
+            """
+        )
+
+        st.write(
+            "**비유:** 여러 명의 전문가에게 의견을 물어보고 "
+            "가장 많은 사람이 선택한 답을 결정하는 방법입니다."
+        )
 
 
     # ======================================
-    # 18. FINAL COMPARISON
+    # 19. 알고리즘 비교 정리
     # ======================================
 
     st.divider()
 
-    st.header("📚 Algorithm Comparison Summary")
+    st.header("📚 알고리즘 특징 비교")
 
-    summary_df = pd.DataFrame({
-        "Algorithm": [
+    정리자료 = pd.DataFrame({
+        "알고리즘": [
             "KNN",
-            "Decision Tree",
-            "Random Forest"
+            "의사결정나무",
+            "랜덤 포레스트"
         ],
-        "Main Idea": [
-            "Compare nearby data",
-            "Follow decision rules",
-            "Combine many trees"
+        "작동 원리": [
+            "가까운 데이터 비교",
+            "조건에 따른 분류",
+            "여러 나무의 투표"
         ],
-        "Voting Method": [
-            "5 nearest neighbors",
-            "Samples in a leaf",
-            "100 decision trees"
+        "주요 특징": [
+            "주변 데이터 5개 활용",
+            "질문과 조건으로 판단",
+            "의사결정나무 100개 활용"
         ]
     })
 
     st.dataframe(
-        summary_df,
+        정리자료,
         use_container_width=True,
         hide_index=True
     )
 
     st.success(
-        f"Your selected algorithm is {selected_algorithm}. "
-        f"Its prediction is {get_species_name(selected_prediction)}."
+        f"선택한 알고리즘은 {선택알고리즘}이며, "
+        f"예측 결과는 {품종한글(선택예측)}입니다."
     )
+
 
 else:
 
     st.info(
-        "Enter the flower measurements, select an algorithm, "
-        "and click the prediction button."
+        "꽃잎 길이와 너비를 입력하고 "
+        "알고리즘을 선택한 다음 예측 버튼을 눌러 주세요."
     )
 
 
 # ==========================================
-# 19. FOOTER
+# 20. 하단 안내
 # ==========================================
 
 st.divider()
 
 st.caption(
-    "Iris AI Classification | "
-    "Pandas + Scikit-learn + Streamlit"
+    "아이리스 인공지능 품종 예측 프로그램 | "
+    "판다스 + 사이킷런 + 스트림릿"
 )
