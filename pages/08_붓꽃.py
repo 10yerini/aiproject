@@ -1,8 +1,7 @@
 
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import koreanize_matplotlib
+import plotly.graph_objects as go
 from pathlib import Path
 
 from sklearn.neighbors import KNeighborsClassifier
@@ -23,6 +22,7 @@ st.set_page_config(
 )
 
 st.title("🌸 아이리스 인공지능 품종 예측")
+
 st.write(
     "꽃잎의 길이와 너비를 입력하고 "
     "세 가지 머신러닝 알고리즘으로 품종을 예측해 보세요."
@@ -32,14 +32,7 @@ st.divider()
 
 
 # ==========================================
-# 2. 한글 그래프 폰트 설정
-# ==========================================
-
-plt.rcParams["axes.unicode_minus"] = False
-
-
-# ==========================================
-# 3. CSV 파일 불러오기
+# 2. CSV 파일 불러오기
 # ==========================================
 
 현재폴더 = Path(__file__).resolve().parent
@@ -88,12 +81,10 @@ except Exception as e:
 
 
 # ==========================================
-# 4. 데이터 전처리
+# 3. 데이터 전처리
 # ==========================================
 
 df.columns = df.columns.astype(str).str.strip()
-
-컬럼이름변경 = {}
 
 컬럼별칭 = {
     "petal_length": [
@@ -103,6 +94,7 @@ df.columns = df.columns.astype(str).str.strip()
         "꽃잎 길이",
         "꽃잎길이"
     ],
+
     "petal_width": [
         "PetalWidthCm",
         "Petal Width",
@@ -110,6 +102,7 @@ df.columns = df.columns.astype(str).str.strip()
         "꽃잎 너비",
         "꽃잎너비"
     ],
+
     "species": [
         "Species",
         "species",
@@ -117,9 +110,14 @@ df.columns = df.columns.astype(str).str.strip()
     ]
 }
 
+컬럼이름변경 = {}
+
 for 표준이름, 별칭목록 in 컬럼별칭.items():
+
     for 별칭 in 별칭목록:
+
         if 별칭 in df.columns:
+
             컬럼이름변경[별칭] = 표준이름
             break
 
@@ -132,9 +130,16 @@ df = df.rename(columns=컬럼이름변경)
 ]
 
 if not all(컬럼 in df.columns for 컬럼 in 필수컬럼):
+
     st.error("CSV 파일의 컬럼명을 확인해 주세요.")
-    st.write("현재 컬럼:", df.columns.tolist())
+
+    st.write(
+        "현재 CSV 컬럼:",
+        df.columns.tolist()
+    )
+
     st.stop()
+
 
 df["petal_length"] = pd.to_numeric(
     df["petal_length"],
@@ -146,6 +151,8 @@ df["petal_width"] = pd.to_numeric(
     errors="coerce"
 )
 
+df["species"] = df["species"].astype(str).str.strip()
+
 df = df.dropna(
     subset=필수컬럼
 ).copy()
@@ -154,12 +161,19 @@ if len(df) < 5:
     st.error("학습에 필요한 데이터가 부족합니다.")
     st.stop()
 
-X = df[["petal_length", "petal_width"]]
-y = df["species"].astype(str)
+if df["species"].nunique() < 2:
+    st.error("품종이 두 종류 이상 있어야 분류할 수 있습니다.")
+    st.stop()
+
+X = df[
+    ["petal_length", "petal_width"]
+]
+
+y = df["species"]
 
 
 # ==========================================
-# 5. 품종 이름 한글 변환
+# 4. 품종 이름 한글 변환
 # ==========================================
 
 품종이름 = {
@@ -187,7 +201,7 @@ def 품종한글(이름):
 
 
 # ==========================================
-# 6. 입력 가능한 범위
+# 5. 입력 가능한 값의 범위
 # ==========================================
 
 최소길이 = float(X["petal_length"].min())
@@ -198,7 +212,7 @@ def 품종한글(이름):
 
 
 # ==========================================
-# 7. 세 가지 알고리즘 만들기
+# 6. 세 가지 알고리즘 만들기
 # ==========================================
 
 K = 5
@@ -207,7 +221,9 @@ K = 5
 
     "KNN": make_pipeline(
         StandardScaler(),
-        KNeighborsClassifier(n_neighbors=K)
+        KNeighborsClassifier(
+            n_neighbors=K
+        )
     ),
 
     "의사결정나무": DecisionTreeClassifier(
@@ -225,7 +241,7 @@ K = 5
 
 
 # ==========================================
-# 8. 세 가지 알고리즘 학습
+# 7. 알고리즘 학습
 # ==========================================
 
 for 모델 in 모델들.values():
@@ -233,7 +249,7 @@ for 모델 in 모델들.values():
 
 
 # ==========================================
-# 9. 데이터 정보
+# 8. 데이터 정보
 # ==========================================
 
 st.subheader("📊 아이리스 데이터 정보")
@@ -259,7 +275,7 @@ st.divider()
 
 
 # ==========================================
-# 10. 사용자 입력
+# 9. 사용자 입력
 # ==========================================
 
 st.subheader("✏️ 꽃잎 크기 입력하기")
@@ -300,7 +316,7 @@ with 열2:
 
 
 # ==========================================
-# 11. 알고리즘 선택
+# 10. 알고리즘 선택
 # ==========================================
 
 st.divider()
@@ -317,9 +333,19 @@ st.subheader("🤖 예측 알고리즘 선택")
 )
 
 알고리즘설명 = {
-    "KNN": "가장 가까운 데이터 5개를 찾아 다수결로 품종을 결정합니다.",
-    "의사결정나무": "꽃잎의 길이와 너비에 관한 여러 조건을 차례대로 확인합니다.",
-    "랜덤 포레스트": "100개의 의사결정나무가 각각 예측한 결과를 종합합니다."
+
+    "KNN":
+        "가장 가까운 데이터 5개를 찾아 "
+        "다수결로 품종을 결정합니다.",
+
+    "의사결정나무":
+        "꽃잎의 길이와 너비에 관한 여러 조건을 "
+        "차례대로 확인합니다.",
+
+    "랜덤 포레스트":
+        "100개의 의사결정나무가 각각 예측한 "
+        "결과를 종합합니다."
+
 }
 
 st.info(
@@ -329,7 +355,7 @@ st.info(
 
 
 # ==========================================
-# 12. 예측 및 비교 버튼
+# 11. 예측 및 비교
 # ==========================================
 
 if st.button(
@@ -339,34 +365,48 @@ if st.button(
 
     입력데이터 = pd.DataFrame(
         [[꽃잎길이, 꽃잎너비]],
-        columns=["petal_length", "petal_width"]
+        columns=[
+            "petal_length",
+            "petal_width"
+        ]
     )
 
     예측결과 = {}
     확률결과 = {}
     비교자료 = []
 
-    # 세 알고리즘 모두 예측
+
+    # --------------------------------------
+    # 세 가지 알고리즘으로 예측
+    # --------------------------------------
+
     for 이름, 모델 in 모델들.items():
 
         예측 = 모델.predict(입력데이터)[0]
 
-        확률 = 모델.predict_proba(입력데이터)[0]
+        확률 = 모델.predict_proba(
+            입력데이터
+        )[0]
 
         예측결과[이름] = 예측
         확률결과[이름] = 확률
 
         비교자료.append({
+
             "알고리즘": 이름,
+
             "예측 품종": 품종한글(예측),
+
             "최고 예측 확률(%)": round(
-                max(확률) * 100, 1
+                max(확률) * 100,
+                1
             )
+
         })
 
 
     # ======================================
-    # 13. 선택한 알고리즘의 예측 결과
+    # 12. 선택한 알고리즘의 결과
     # ======================================
 
     st.divider()
@@ -384,16 +424,16 @@ if st.button(
     )
 
     st.write(
-        f"입력한 꽃잎 길이: {꽃잎길이} cm"
+        f"꽃잎 길이: {꽃잎길이} cm"
     )
 
     st.write(
-        f"입력한 꽃잎 너비: {꽃잎너비} cm"
+        f"꽃잎 너비: {꽃잎너비} cm"
     )
 
 
     # ======================================
-    # 14. 세 알고리즘 결과 비교
+    # 13. 세 알고리즘 결과 비교
     # ======================================
 
     st.divider()
@@ -408,29 +448,37 @@ if st.button(
         hide_index=True
     )
 
-    st.write("각 알고리즘이 같은 입력값을 어떻게 예측했는지 확인해 보세요.")
+    st.write(
+        "동일한 입력값을 세 가지 알고리즘에 적용한 결과입니다."
+    )
+
 
     # ======================================
-    # 15. 품종별 예측 확률 비교
+    # 14. 품종별 예측 확률
     # ======================================
 
     st.subheader("📈 알고리즘별 품종 예측 확률")
 
     확률자료 = []
 
+    전체품종 = sorted(y.unique())
+
     for 이름 in 모델들.keys():
+
+        모델 = 모델들[이름]
 
         행 = {
             "알고리즘": 이름
         }
 
         for 품종, 확률 in zip(
-            모델들[이름].classes_,
+            모델.classes_,
             확률결과[이름]
         ):
 
             행[품종한글(품종)] = round(
-                확률 * 100, 1
+                확률 * 100,
+                1
             )
 
         확률자료.append(행)
@@ -443,18 +491,18 @@ if st.button(
         hide_index=True
     )
 
-    st.bar_chart(
-        확률df.set_index("알고리즘")
-    )
+    그래프df = 확률df.set_index("알고리즘")
+
+    st.bar_chart(그래프df)
 
     st.caption(
-        "※ 예측 확률은 알고리즘별 내부 확률 추정치이며 "
-        "실제 정확도와 동일한 의미는 아닙니다."
+        "※ 예측 확률은 각 알고리즘의 확률 추정치이며 "
+        "실제 예측 정확도와는 다릅니다."
     )
 
 
     # ======================================
-    # 16. KNN 가장 가까운 데이터 5개
+    # 15. KNN 최근접 데이터 5개
     # ======================================
 
     if 선택알고리즘 == "KNN":
@@ -475,7 +523,9 @@ if st.button(
             scaler.transform(입력데이터)
         )
 
-        가까운자료 = df.iloc[인덱스[0]].copy()
+        가까운자료 = df.iloc[
+            인덱스[0]
+        ].copy()
 
         가까운자료["거리"] = 거리[0]
 
@@ -508,85 +558,115 @@ if st.button(
 
 
     # ======================================
-    # 17. 꽃잎 분포 그래프
+    # 16. 꽃잎 분포 그래프 (Plotly)
     # ======================================
 
     st.divider()
 
     st.subheader("📍 아이리스 꽃잎 분포 그래프")
 
-    fig, ax = plt.subplots(figsize=(11, 7))
+    fig = go.Figure()
 
+    # 품종별 데이터 표시
     for 품종, 그룹 in df.groupby("species"):
 
-        ax.scatter(
-            그룹["petal_length"],
-            그룹["petal_width"],
-            color=품종색상.get(품종, "gray"),
-            label=품종한글(품종),
-            alpha=0.65,
-            s=65
+        fig.add_trace(
+            go.Scatter(
+
+                x=그룹["petal_length"],
+
+                y=그룹["petal_width"],
+
+                mode="markers",
+
+                name=품종한글(품종),
+
+                marker=dict(
+                    size=9,
+                    color=품종색상.get(
+                        품종,
+                        "gray"
+                    ),
+                    opacity=0.7
+                )
+
+            )
         )
 
+
     # 사용자 입력값 노란색 별표
-    ax.scatter(
-        꽃잎길이,
-        꽃잎너비,
-        color="yellow",
-        edgecolors="black",
-        marker="*",
-        s=500,
-        linewidths=1.5,
-        label="사용자 입력값",
-        zorder=10
+    fig.add_trace(
+        go.Scatter(
+
+            x=[꽃잎길이],
+
+            y=[꽃잎너비],
+
+            mode="markers+text",
+
+            name="사용자 입력값",
+
+            text=["사용자 입력값"],
+
+            textposition="top right",
+
+            marker=dict(
+                size=25,
+                color="yellow",
+                symbol="star",
+                line=dict(
+                    color="black",
+                    width=1.5
+                )
+            )
+
+        )
     )
 
-    ax.annotate(
-        "사용자 입력값",
-        (꽃잎길이, 꽃잎너비),
-        xytext=(12, 12),
-        textcoords="offset points",
-        fontsize=11,
-        fontweight="bold"
+
+    fig.update_layout(
+
+        title="아이리스 품종별 꽃잎 분포",
+
+        xaxis_title="꽃잎 길이 (cm)",
+
+        yaxis_title="꽃잎 너비 (cm)",
+
+        legend_title="아이리스 품종",
+
+        template="plotly_white",
+
+        height=600,
+
+        font=dict(
+            family="sans-serif",
+            size=14
+        )
+
     )
 
-    ax.set_title(
-        "아이리스 품종별 꽃잎 분포",
-        fontsize=17,
-        pad=20
+    fig.update_xaxes(
+        showgrid=True
     )
 
-    ax.set_xlabel(
-        "꽃잎 길이 (cm)",
-        fontsize=13
+    fig.update_yaxes(
+        showgrid=True
     )
 
-    ax.set_ylabel(
-        "꽃잎 너비 (cm)",
-        fontsize=13
+    st.plotly_chart(
+        fig,
+        use_container_width=True
     )
-
-    ax.legend(title="아이리스 품종")
-
-    ax.grid(
-        True,
-        alpha=0.3
-    )
-
-    fig.tight_layout()
-
-    st.pyplot(fig)
-
-    plt.close(fig)
 
 
     # ======================================
-    # 18. 알고리즘 작동 원리 설명
+    # 17. 알고리즘 작동 원리
     # ======================================
 
     st.divider()
 
     st.header("🧠 세 가지 분류 알고리즘 작동 원리")
+
 
     # --------------------------------------
     # KNN
@@ -597,14 +677,10 @@ if st.button(
         expanded=True
     ):
 
-        st.write(
-            """
-            **핵심 원리: 나와 가장 비슷한 이웃을 찾아보는 방법**
-            """
-        )
-
         st.markdown(
             """
+            **핵심 원리: 나와 가장 비슷한 이웃을 찾는 방법**
+
             ① 사용자가 꽃잎 길이와 너비를 입력합니다.
 
             ② 기존 아이리스 데이터와 입력값 사이의 거리를 계산합니다.
@@ -619,7 +695,7 @@ if st.button(
 
         st.info(
             """
-            쉬운 예시
+            **쉬운 예시**
 
             가까운 꽃 5개의 품종이 다음과 같다고 가정해 봅시다.
 
@@ -632,7 +708,7 @@ if st.button(
         )
 
         st.write(
-            "**비유:** 주변에서 나와 가장 비슷한 친구 5명에게 "
+            "💡 비유: 주변에서 나와 가장 비슷한 친구 5명에게 "
             "의견을 물어보고 가장 많은 의견을 따르는 방법입니다."
         )
 
@@ -645,14 +721,10 @@ if st.button(
         "2. 의사결정나무 (Decision Tree)"
     ):
 
-        st.write(
-            """
-            **핵심 원리: 여러 가지 질문과 조건을 따라가는 방법**
-            """
-        )
-
         st.markdown(
             """
+            **핵심 원리: 여러 가지 질문과 조건을 따라가는 방법**
+
             ① 꽃잎 길이와 너비를 확인합니다.
 
             ② 꽃잎 길이가 특정 기준보다 작은지 큰지 확인합니다.
@@ -667,7 +739,7 @@ if st.button(
 
         st.info(
             """
-            쉬운 예시
+            **쉬운 예시**
 
             - 꽃잎 길이가 짧은가요?
             - 꽃잎 너비가 작은가요?
@@ -677,7 +749,7 @@ if st.button(
         )
 
         st.write(
-            "**비유:** 스무고개처럼 질문에 답하면서 "
+            "💡 비유: 스무고개처럼 질문에 답하면서 "
             "정답을 찾아가는 방법입니다."
         )
 
@@ -690,15 +762,11 @@ if st.button(
         "3. 랜덤 포레스트 (Random Forest)"
     ):
 
-        st.write(
-            """
-            **핵심 원리: 여러 의사결정나무의 의견을 모으는 방법**
-            """
-        )
-
         st.markdown(
             """
-            ① 여러 개의 학습용 데이터를 이용해 의사결정나무를 만듭니다.
+            **핵심 원리: 여러 의사결정나무의 의견을 모으는 방법**
+
+            ① 여러 개의 학습용 데이터로 의사결정나무를 만듭니다.
 
             ② 각 의사결정나무가 독립적으로 품종을 예측합니다.
 
@@ -712,7 +780,7 @@ if st.button(
 
         st.info(
             """
-            쉬운 예시
+            **쉬운 예시**
 
             의사결정나무 100개가 다음과 같이 투표했다고 가정해 봅시다.
 
@@ -725,13 +793,13 @@ if st.button(
         )
 
         st.write(
-            "**비유:** 여러 명의 전문가에게 의견을 물어보고 "
+            "💡 비유: 여러 명의 전문가에게 의견을 물어보고 "
             "가장 많은 사람이 선택한 답을 결정하는 방법입니다."
         )
 
 
     # ======================================
-    # 19. 알고리즘 비교 정리
+    # 18. 알고리즘 특징 비교
     # ======================================
 
     st.divider()
@@ -739,21 +807,25 @@ if st.button(
     st.header("📚 알고리즘 특징 비교")
 
     정리자료 = pd.DataFrame({
+
         "알고리즘": [
             "KNN",
             "의사결정나무",
             "랜덤 포레스트"
         ],
+
         "작동 원리": [
             "가까운 데이터 비교",
             "조건에 따른 분류",
             "여러 나무의 투표"
         ],
+
         "주요 특징": [
             "주변 데이터 5개 활용",
             "질문과 조건으로 판단",
             "의사결정나무 100개 활용"
         ]
+
     })
 
     st.dataframe(
@@ -762,9 +834,21 @@ if st.button(
         hide_index=True
     )
 
+
+    # ======================================
+    # 19. 최종 결과
+    # ======================================
+
+    st.divider()
+
     st.success(
-        f"선택한 알고리즘은 {선택알고리즘}이며, "
-        f"예측 결과는 {품종한글(선택예측)}입니다."
+        f"선택한 알고리즘: {선택알고리즘}\n\n"
+        f"최종 예측 품종: {품종한글(선택예측)}"
+    )
+
+    st.caption(
+        "※ 세 알고리즘은 동일한 학습 데이터를 사용합니다. "
+        "예측 확률은 실제 정확도와 다릅니다."
     )
 
 
@@ -784,5 +868,5 @@ st.divider()
 
 st.caption(
     "아이리스 인공지능 품종 예측 프로그램 | "
-    "판다스 + 사이킷런 + 스트림릿"
+    "판다스 + 사이킷런 + Plotly + Streamlit"
 )
