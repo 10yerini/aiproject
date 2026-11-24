@@ -5,33 +5,34 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
 
-# =====================================
+# ==========================================
 # 1. PAGE SETTINGS
-# =====================================
+# ==========================================
 
 st.set_page_config(
-    page_title="Iris Flower Prediction",
+    page_title="Iris AI Classifier",
     page_icon="🌸",
     layout="wide"
 )
 
-st.title("🌸 Iris Flower Prediction")
-
+st.title("🌸 Iris Flower AI Classification")
 st.write(
-    "Enter petal length and width to predict "
-    "the iris flower species."
+    "Compare three machine learning algorithms "
+    "to predict iris flower species."
 )
 
 st.divider()
 
 
-# =====================================
+# ==========================================
 # 2. LOAD CSV FILE
-# =====================================
+# ==========================================
 
 current_folder = Path(__file__).resolve().parent
 
@@ -64,7 +65,7 @@ def load_data(path):
         except UnicodeDecodeError:
             continue
 
-    raise ValueError("Unable to read CSV encoding.")
+    raise ValueError("Unable to read CSV file.")
 
 
 try:
@@ -75,9 +76,9 @@ except Exception as e:
     st.stop()
 
 
-# =====================================
+# ==========================================
 # 3. DATA PREPROCESSING
-# =====================================
+# ==========================================
 
 df.columns = df.columns.astype(str).str.strip()
 
@@ -144,9 +145,9 @@ X = df[["petal_length", "petal_width"]]
 y = df["species"].astype(str)
 
 
-# =====================================
+# ==========================================
 # 4. SPECIES NAME
-# =====================================
+# ==========================================
 
 species_names = {
     "Iris-setosa": "Setosa",
@@ -156,6 +157,7 @@ species_names = {
     "versicolor": "Versicolor",
     "virginica": "Virginica"
 }
+
 
 def get_species_name(name):
     return species_names.get(name, name)
@@ -171,9 +173,9 @@ species_colors = {
 }
 
 
-# =====================================
+# ==========================================
 # 5. INPUT RANGE
-# =====================================
+# ==========================================
 
 min_length = float(X["petal_length"].min())
 max_length = float(X["petal_length"].max())
@@ -182,23 +184,42 @@ min_width = float(X["petal_width"].min())
 max_width = float(X["petal_width"].max())
 
 
-# =====================================
-# 6. TRAIN KNN MODEL
-# =====================================
+# ==========================================
+# 6. CREATE THREE MODELS
+# ==========================================
 
-K = 5
+models = {
 
-model = make_pipeline(
-    StandardScaler(),
-    KNeighborsClassifier(n_neighbors=K)
-)
+    "KNN": make_pipeline(
+        StandardScaler(),
+        KNeighborsClassifier(n_neighbors=5)
+    ),
 
-model.fit(X, y)
+    "Decision Tree": DecisionTreeClassifier(
+        max_depth=4,
+        random_state=42
+    ),
+
+    "Random Forest": RandomForestClassifier(
+        n_estimators=100,
+        max_depth=4,
+        random_state=42
+    )
+
+}
 
 
-# =====================================
-# 7. DATA INFORMATION
-# =====================================
+# ==========================================
+# 7. TRAIN ALL MODELS
+# ==========================================
+
+for model in models.values():
+    model.fit(X, y)
+
+
+# ==========================================
+# 8. DATA INFORMATION
+# ==========================================
 
 st.subheader("Dataset Information")
 
@@ -206,25 +227,25 @@ col1, col2, col3 = st.columns(3)
 
 col1.metric(
     "Total Samples",
-    f"{len(df)}"
+    len(df)
 )
 
 col2.metric(
-    "Petal Length Range",
-    f"{min_length} - {max_length} cm"
+    "Number of Species",
+    y.nunique()
 )
 
 col3.metric(
-    "Petal Width Range",
-    f"{min_width} - {max_width} cm"
+    "Algorithms",
+    "3"
 )
 
-
-# =====================================
-# 8. USER INPUT
-# =====================================
-
 st.divider()
+
+
+# ==========================================
+# 9. USER INPUT
+# ==========================================
 
 st.subheader("Enter Flower Measurements")
 
@@ -262,12 +283,40 @@ with col2:
     )
 
 
-# =====================================
-# 9. PREDICTION
-# =====================================
+# ==========================================
+# 10. SELECT ALGORITHM
+# ==========================================
+
+st.divider()
+
+st.subheader("🤖 Select Machine Learning Algorithm")
+
+selected_algorithm = st.selectbox(
+    "Choose an algorithm",
+    [
+        "KNN",
+        "Decision Tree",
+        "Random Forest"
+    ]
+)
+
+algorithm_descriptions = {
+    "KNN": "Finds the 5 closest flowers and predicts by voting.",
+    "Decision Tree": "Uses a sequence of conditions to classify flowers.",
+    "Random Forest": "Combines 100 decision trees to make a prediction."
+}
+
+st.info(
+    algorithm_descriptions[selected_algorithm]
+)
+
+
+# ==========================================
+# 11. PREDICTION BUTTON
+# ==========================================
 
 if st.button(
-    "Predict Iris Species",
+    "Predict and Compare Algorithms",
     use_container_width=True
 ):
 
@@ -276,138 +325,135 @@ if st.button(
         columns=["petal_length", "petal_width"]
     )
 
-    prediction = model.predict(input_data)[0]
+    # --------------------------------------
+    # Predict using all three algorithms
+    # --------------------------------------
 
-    probabilities = model.predict_proba(input_data)[0]
+    predictions = {}
+    probability_results = {}
+    comparison_rows = []
 
-    # Find nearest 5 samples
-    knn = model.named_steps["kneighborsclassifier"]
-    scaler = model.named_steps["standardscaler"]
+    for name, model in models.items():
 
-    scaled_input = scaler.transform(input_data)
-    scaled_X = scaler.transform(X)
+        prediction = model.predict(input_data)[0]
 
-    distances, indices = knn.kneighbors(
-        scaled_input
-    )
+        probabilities = model.predict_proba(
+            input_data
+        )[0]
 
-    nearest_data = df.iloc[indices[0]].copy()
+        predictions[name] = prediction
 
-    nearest_data["Distance"] = distances[0]
+        probability_results[name] = probabilities
 
-    nearest_data["Species Name"] = (
-        nearest_data["species"].map(get_species_name)
-    )
+        confidence = max(probabilities) * 100
 
-    st.divider()
+        comparison_rows.append({
+            "Algorithm": name,
+            "Predicted Species": get_species_name(prediction),
+            "Confidence (%)": round(confidence, 1)
+        })
 
-    # =================================
-    # 10. ALGORITHM INFORMATION
-    # =================================
 
-    st.subheader("🤖 Machine Learning Algorithm")
-
-    st.success(
-        "Algorithm Used: K-Nearest Neighbors (KNN)"
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Algorithm", "KNN")
-    col2.metric("Nearest Neighbors (K)", K)
-    col3.metric("Features Used", "2")
-
-    st.write(
-        """
-        KNN is a classification algorithm that predicts
-        a new sample by comparing it with similar samples
-        in the existing dataset.
-        """
-    )
-
-    # =================================
-    # 11. PREDICTION RESULT
-    # =================================
+    # ======================================
+    # 12. SELECTED ALGORITHM RESULT
+    # ======================================
 
     st.divider()
 
-    st.subheader("Prediction Result")
+    st.subheader("Selected Algorithm Result")
+
+    selected_prediction = predictions[selected_algorithm]
 
     st.success(
-        f"Predicted Species: {get_species_name(prediction)}"
+        f"""
+        Selected Algorithm: {selected_algorithm}
+
+        Predicted Species: {get_species_name(selected_prediction)}
+        """
     )
 
     st.write(
-        f"Your Input: Petal Length = {petal_length} cm, "
-        f"Petal Width = {petal_width} cm"
+        f"Petal Length: {petal_length} cm | "
+        f"Petal Width: {petal_width} cm"
     )
 
-    # =================================
-    # 12. NEAREST 5 DATA
-    # =================================
 
-    st.subheader("🔎 The 5 Nearest Neighbors")
+    # ======================================
+    # 13. COMPARE THREE ALGORITHMS
+    # ======================================
 
-    result_table = nearest_data[
-        [
-            "petal_length",
-            "petal_width",
-            "Species Name",
-            "Distance"
-        ]
-    ].copy()
+    st.divider()
 
-    result_table.columns = [
-        "Petal Length (cm)",
-        "Petal Width (cm)",
-        "Species",
-        "Distance"
-    ]
+    st.subheader("📊 Compare Three Algorithms")
 
-    result_table.index = range(1, K + 1)
+    comparison_df = pd.DataFrame(comparison_rows)
 
     st.dataframe(
-        result_table.round(3),
-        use_container_width=True
+        comparison_df,
+        use_container_width=True,
+        hide_index=True
     )
 
-    # Count species among neighbors
-    neighbor_counts = nearest_data[
-        "Species Name"
-    ].value_counts()
-
-    st.write("Voting Results")
-
-    for species, count in neighbor_counts.items():
-
-        st.write(
-            f"{species}: {count} out of {K} neighbors"
-        )
-
-    # =================================
-    # 13. PREDICTION PROBABILITY
-    # =================================
-
-    st.divider()
-
-    st.subheader("Prediction Probability")
-
-    probability_df = pd.DataFrame({
-        "Species": [
-            get_species_name(name)
-            for name in model.classes_
-        ],
-        "Probability (%)": probabilities * 100
-    })
-
-    st.bar_chart(
-        probability_df.set_index("Species"),
-        y="Probability (%)"
+    st.write(
+        "All three algorithms predict the same input data. "
+        "Compare their predicted species and confidence values."
     )
 
-    # =================================
-    # 14. SCATTER PLOT
-    # =================================
+    # ======================================
+    # 14. SPECIES PROBABILITY COMPARISON
+    # ======================================
+
+    st.subheader("Species Probability Comparison")
+
+    probability_rows = []
+
+    for name in models.keys():
+
+        classes = models[name].classes_
+
+        row = {
+            "Algorithm": name
+        }
+
+        for species, probability in zip(
+            classes,
+            probability_results[name]
+        ):
+
+            row[get_species_name(species)] = round(
+                probability * 100, 1
+            )
+
+        probability_rows.append(row)
+
+    probability_df = pd.DataFrame(probability_rows)
+
+    st.dataframe(
+        probability_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.caption(
+        "Note: Confidence values are model probability estimates. "
+        "Their interpretation differs by algorithm."
+    )
+
+
+    # ======================================
+    # 15. PROBABILITY CHART
+    # ======================================
+
+    st.subheader("Prediction Probability Chart")
+
+    chart_df = probability_df.set_index("Algorithm")
+
+    st.bar_chart(chart_df)
+
+
+    # ======================================
+    # 16. SCATTER PLOT
+    # ======================================
 
     st.divider()
 
@@ -426,7 +472,7 @@ if st.button(
             s=65
         )
 
-    # User input
+    # User input as yellow star
     ax.scatter(
         petal_length,
         petal_width,
@@ -472,87 +518,187 @@ if st.button(
 
     plt.close(fig)
 
-    # =================================
-    # 15. EASY ALGORITHM EXPLANATION
-    # =================================
+
+    # ======================================
+    # 17. ALGORITHM EXPLANATIONS
+    # ======================================
 
     st.divider()
 
-    st.subheader("🧠 How Does KNN Work?")
+    st.header("🧠 How Do the Three Algorithms Work?")
+
+    # --------------------------------------
+    # KNN
+    # --------------------------------------
+
+    st.subheader("1. KNN (K-Nearest Neighbors)")
 
     st.write(
         """
-        KNN stands for K-Nearest Neighbors.
-
-        It predicts a flower species by finding
-        the 5 most similar flowers in the dataset.
+        KNN predicts a flower by looking at the
+        5 most similar flowers in the existing dataset.
         """
     )
 
     st.markdown(
         """
-        ### Step 1. Enter the measurements
+        **How it works:**
 
-        You enter the petal length and petal width
-        of a flower.
+        1. Receive the user's petal length and width.
+        2. Calculate the distance between the input and existing flowers.
+        3. Find the 5 closest flowers.
+        4. Count the species of those 5 flowers.
+        5. Predict the species with the most votes.
 
-        ### Step 2. Find similar flowers
+        **Easy example:**
 
-        The computer compares your input with
-        all flowers in the training dataset.
+        Suppose the 5 closest flowers are:
 
-        ### Step 3. Find the 5 closest flowers
+        - Setosa: 1
+        - Versicolor: 4
+        - Virginica: 0
 
-        KNN selects the 5 flowers that have
-        the smallest distance from your input.
-
-        ### Step 4. Vote for the species
-
-        The 5 flowers vote for their species.
-        The species with the most votes wins.
-
-        ### Step 5. Show the prediction
-
-        The computer displays the species
-        with the most votes as the final prediction.
+        The final prediction is Versicolor.
         """
     )
 
     st.info(
-        f"""
-        Example:
+        "KNN is like asking your 5 closest neighbors "
+        "which flower looks most similar."
+    )
 
-        If the 5 nearest flowers are:
+    # --------------------------------------
+    # Decision Tree
+    # --------------------------------------
 
-        - Setosa: 1 flower
-        - Versicolor: 4 flowers
-        - Virginica: 0 flowers
+    st.subheader("2. Decision Tree")
 
-        The prediction is Versicolor because
-        it received the most votes.
+    st.write(
+        """
+        A Decision Tree predicts a species by following
+        a series of questions and conditions.
         """
     )
 
-    st.caption(
-        "Note: KNN uses standardized petal measurements "
-        "to calculate distances."
+    st.markdown(
+        """
+        **How it works:**
+
+        1. Look at the petal measurements.
+        2. Check a condition, such as whether petal length
+           is smaller or larger than a certain value.
+        3. Follow the appropriate branch.
+        4. Continue checking conditions.
+        5. Reach a final group and predict its most common species.
+
+        **Easy example:**
+
+        - Is petal length small?
+        - Is petal width small?
+        - Follow the answers to the next question.
+        - Reach the final species prediction.
+        """
+    )
+
+    st.info(
+        "A Decision Tree works like a questionnaire "
+        "that asks questions one by one."
+    )
+
+    # --------------------------------------
+    # Random Forest
+    # --------------------------------------
+
+    st.subheader("3. Random Forest")
+
+    st.write(
+        """
+        Random Forest combines many Decision Trees
+        to make one final prediction.
+        """
+    )
+
+    st.markdown(
+        """
+        **How it works:**
+
+        1. Create many Decision Trees using different
+           samples and feature selections.
+        2. Each tree makes its own prediction.
+        3. Collect the predictions from all trees.
+        4. Count how many trees voted for each species.
+        5. Predict the species with the most votes.
+
+        **Easy example:**
+
+        Suppose 100 trees predict:
+
+        - Setosa: 10 votes
+        - Versicolor: 75 votes
+        - Virginica: 15 votes
+
+        The final prediction is Versicolor.
+        """
+    )
+
+    st.info(
+        "Random Forest is like asking 100 experts "
+        "and choosing the answer with the most votes."
+    )
+
+
+    # ======================================
+    # 18. FINAL COMPARISON
+    # ======================================
+
+    st.divider()
+
+    st.header("📚 Algorithm Comparison Summary")
+
+    summary_df = pd.DataFrame({
+        "Algorithm": [
+            "KNN",
+            "Decision Tree",
+            "Random Forest"
+        ],
+        "Main Idea": [
+            "Compare nearby data",
+            "Follow decision rules",
+            "Combine many trees"
+        ],
+        "Voting Method": [
+            "5 nearest neighbors",
+            "Samples in a leaf",
+            "100 decision trees"
+        ]
+    })
+
+    st.dataframe(
+        summary_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.success(
+        f"Your selected algorithm is {selected_algorithm}. "
+        f"Its prediction is {get_species_name(selected_prediction)}."
     )
 
 else:
 
     st.info(
-        "Enter the measurements and click "
-        "'Predict Iris Species'."
+        "Enter the flower measurements, select an algorithm, "
+        "and click the prediction button."
     )
 
 
-# =====================================
-# 16. FOOTER
-# =====================================
+# ==========================================
+# 19. FOOTER
+# ==========================================
 
 st.divider()
 
 st.caption(
-    "Iris Flower Prediction | "
+    "Iris AI Classification | "
     "Pandas + Scikit-learn + Streamlit"
 )
