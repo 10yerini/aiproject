@@ -21,30 +21,36 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🚄 SRT 주차별 승차인원 분석")
-st.markdown(
-    "원하는 주차를 선택하고 가장 많이 이용한 역과 "
-    "승차인원 추세를 분석해 보세요!"
+st.title("🚄 SRT 주간 승차인원 분석")
+st.write(
+    "주차별 승차인원을 분석하고 "
+    "인공지능 알고리즘으로 미래 승차인원을 예측합니다."
 )
 
 st.divider()
 
 
 # ==========================================
-# 2. CSV 파일 불러오기
+# 2. CSV 불러오기
 # ==========================================
 
 @st.cache_data
 def load_data(file_bytes=None):
 
-    if file_bytes is not None:
-        import io
-        return pd.read_csv(
-            io.BytesIO(file_bytes),
-            encoding="cp949"
-        )
+    import io
 
-    # 현재 py 파일은 pages 폴더에 있음
+    if file_bytes is not None:
+        for encoding in ["cp949", "utf-8-sig", "utf-8"]:
+            try:
+                return pd.read_csv(
+                    io.BytesIO(file_bytes),
+                    encoding=encoding
+                )
+            except UnicodeDecodeError:
+                continue
+
+        raise ValueError("CSV 인코딩을 확인해 주세요.")
+
     base_dir = Path(__file__).resolve().parent.parent
 
     file_path = (
@@ -55,32 +61,38 @@ def load_data(file_bytes=None):
     if not file_path.exists():
         return None
 
-    return pd.read_csv(
-        file_path,
-        encoding="cp949"
-    )
+    for encoding in ["cp949", "utf-8-sig", "utf-8"]:
+        try:
+            return pd.read_csv(
+                file_path,
+                encoding=encoding
+            )
+        except UnicodeDecodeError:
+            continue
+
+    raise ValueError("CSV 파일 인코딩 오류")
 
 
 uploaded_file = st.file_uploader(
-    "CSV 파일 업로드 (필요한 경우)",
+    "CSV 파일 업로드",
     type=["csv"]
 )
 
 try:
-    if uploaded_file is not None:
+    if uploaded_file:
         df = load_data(uploaded_file.getvalue())
     else:
         df = load_data()
 
 except Exception as e:
-    st.error(f"CSV 파일을 읽는 중 오류가 발생했습니다: {e}")
+    st.error(f"파일을 읽을 수 없습니다: {e}")
     st.stop()
 
 
 if df is None:
     st.error(
         "CSV 파일을 찾을 수 없습니다. "
-        "pages 폴더의 상위 폴더에 CSV 파일을 넣어 주세요."
+        "pages 폴더의 상위 폴더에 CSV를 넣어 주세요."
     )
     st.stop()
 
@@ -92,50 +104,51 @@ if df is None:
 df.columns = df.columns.str.strip()
 
 if "주차구분" not in df.columns:
-    st.error("주차구분 컬럼을 찾을 수 없습니다.")
+    st.error("주차구분 컬럼이 없습니다.")
     st.stop()
 
-# 주차 숫자 추출
-df["주차"] = (
+df["주차"] = pd.to_numeric(
     df["주차구분"]
     .astype(str)
-    .str.extract(r"(\d+)\s*주차")[0]
-)
-
-df["주차"] = pd.to_numeric(
-    df["주차"],
+    .str.extract(r"(\d+)\s*주차")[0],
     errors="coerce"
 )
 
-# 역 이름 컬럼
+df = df.dropna(subset=["주차"]).copy()
+df["주차"] = df["주차"].astype(int)
+
 station_columns = [
     col for col in df.columns
     if col not in ["주차구분", "주차"]
 ]
 
-# 숫자로 변환
 for col in station_columns:
     df[col] = pd.to_numeric(
         df[col],
         errors="coerce"
-    ).fillna(0)
+    )
 
-df = df.dropna(subset=["주차"])
-df["주차"] = df["주차"].astype(int)
+df = df.dropna(subset=station_columns, how="all")
 
-df = df.sort_values("주차")
+df[station_columns] = df[station_columns].fillna(0)
 
-if df.empty:
-    st.error("분석할 데이터가 없습니다.")
-    st.stop()
+df = (
+    df.groupby("주차", as_index=False)[station_columns]
+    .sum()
+    .sort_values("주차")
+)
 
-# 주차별 전체 승차인원
 df["전체승차인원"] = df[station_columns].sum(axis=1)
 
+if len(df) < 4:
+    st.error("분석하려면 최소 4주 이상의 데이터가 필요합니다.")
+    st.stop()
+
+last_week = int(df["주차"].max())
+
 st.success(
-    f"데이터 불러오기 성공! "
-    f"전체 {len(df)}개 주차, "
-    f"{len(station_columns)}개 역"
+    f"데이터 분석 준비 완료! "
+    f"{len(df)}개 주차 / {len(station_columns)}개 역"
 )
 
 
@@ -143,12 +156,9 @@ st.success(
 # 4. 주차 범위 선택
 # ==========================================
 
-st.subheader("📅 분석할 주차 선택")
+st.header("📅 분석할 주차 선택")
 
 available_weeks = sorted(df["주차"].unique())
-
-min_week = int(min(available_weeks))
-max_week = int(max(available_weeks))
 
 col1, col2 = st.columns(2)
 
@@ -173,31 +183,23 @@ with col2:
         format_func=lambda x: f"{x}주차"
     )
 
-
-# 선택한 기간의 데이터
 selected_df = df[
     (df["주차"] >= start_week) &
     (df["주차"] <= end_week)
 ].copy()
 
-if selected_df.empty:
-    st.warning("선택한 주차에 데이터가 없습니다.")
-    st.stop()
-
 st.info(
-    f"현재 분석 범위: {start_week}주차 ~ {end_week}주차 "
-    f"({len(selected_df)}개 주차)"
+    f"선택한 분석 기간: {start_week}주차 ~ {end_week}주차"
 )
 
 
 # ==========================================
-# 5. 역별 승차인원 분석
+# 5. 역별 승차인원 TOP 10
 # ==========================================
 
 st.divider()
-st.subheader("🏆 가장 많이 이용한 역")
+st.header("🏆 가장 많이 이용한 역")
 
-# 역별 선택 기간 승차인원 합계
 station_total = (
     selected_df[station_columns]
     .sum()
@@ -211,29 +213,12 @@ total_passengers = int(
     selected_df["전체승차인원"].sum()
 )
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-with col1:
-    st.metric(
-        "🥇 승차인원 1위 역",
-        top_station
-    )
+c1.metric("🥇 승차인원 1위 역", top_station)
+c2.metric("🚄 1위 역 승차인원", f"{top_passengers:,}명")
+c3.metric("👥 전체 승차인원", f"{total_passengers:,}명")
 
-with col2:
-    st.metric(
-        "🚄 1위 역 승차인원",
-        f"{top_passengers:,}명"
-    )
-
-with col3:
-    st.metric(
-        "📊 전체 승차인원 합계",
-        f"{total_passengers:,}명"
-    )
-
-
-# 역별 TOP 10
-st.markdown("### 역별 승차인원 TOP 10")
 
 top10 = station_total.head(10).sort_values()
 
@@ -245,20 +230,18 @@ fig_station.add_trace(
         y=top10.index,
         orientation="h",
         text=[
-            f"{int(v):,}명"
-            for v in top10.values
+            f"{int(v):,}명" for v in top10.values
         ],
-        textposition="outside",
-        marker_color="#3498DB"
+        textposition="outside"
     )
 )
 
 fig_station.update_layout(
-    title="선택한 주차 범위의 역별 승차인원",
+    title="역별 승차인원 TOP 10",
     xaxis_title="승차인원",
-    yaxis_title="역 이름",
-    height=500,
-    template="plotly_white"
+    yaxis_title="역",
+    template="plotly_white",
+    height=500
 )
 
 st.plotly_chart(
@@ -268,53 +251,42 @@ st.plotly_chart(
 
 
 # ==========================================
-# 6. 가장 많이 이용한 주차
+# 6. 가장 많이 탄 주차
 # ==========================================
 
 st.divider()
-st.subheader("📈 가장 많이 이용한 주차")
+st.header("📈 가장 많이 이용한 주차")
 
-max_index = selected_df[
-    "전체승차인원"
-].idxmax()
+max_row = selected_df.loc[
+    selected_df["전체승차인원"].idxmax()
+]
 
-max_row = selected_df.loc[max_index]
-
-max_week_number = int(max_row["주차"])
+max_week = int(max_row["주차"])
 max_week_passengers = int(
     max_row["전체승차인원"]
 )
 
-col1, col2 = st.columns(2)
+c1, c2 = st.columns(2)
 
-with col1:
-    st.metric(
-        "🏆 승차인원이 가장 많은 주차",
-        f"{max_week_number}주차"
-    )
+c1.metric("🏆 최다 승차 주차", f"{max_week}주차")
+c2.metric(
+    "승차인원",
+    f"{max_week_passengers:,}명"
+)
 
-with col2:
-    st.metric(
-        "👥 해당 주차 승차인원",
-        f"{max_week_passengers:,}명"
-    )
-
-
-# 주차별 전체 승차인원 그래프
 fig_week = go.Figure()
 
 fig_week.add_trace(
     go.Bar(
         x=selected_df["주차"],
         y=selected_df["전체승차인원"],
-        name="주차별 승차인원",
-        marker_color="#5DADE2"
+        name="실제 승차인원"
     )
 )
 
 fig_week.add_trace(
     go.Scatter(
-        x=[max_week_number],
+        x=[max_week],
         y=[max_week_passengers],
         mode="markers+text",
         name="최다 승차 주차",
@@ -323,7 +295,7 @@ fig_week.add_trace(
             size=15,
             symbol="star"
         ),
-        text=["최다 승차"],
+        text=["최다"],
         textposition="top center"
     )
 )
@@ -331,7 +303,7 @@ fig_week.add_trace(
 fig_week.update_layout(
     title="주차별 전체 승차인원",
     xaxis_title="주차",
-    yaxis_title="승차인원 (명)",
+    yaxis_title="승차인원",
     xaxis=dict(dtick=1),
     template="plotly_white",
     height=450
@@ -344,81 +316,103 @@ st.plotly_chart(
 
 
 # ==========================================
-# 7. 알고리즘 분석
+# 7. 미래 예측 설정
 # ==========================================
 
 st.divider()
-st.subheader("🤖 인공지능 알고리즘 분석")
+st.header("🔮 미래 승차인원 예측")
 
 st.write(
-    "선택한 주차 범위의 승차인원 데이터를 "
-    "세 가지 머신러닝 알고리즘으로 분석합니다."
+    f"현재 데이터의 마지막 주차는 {last_week}주차입니다. "
+    "이후 주차의 승차인원을 예측합니다."
 )
 
-if len(selected_df) < 4:
-    st.warning(
-        "알고리즘 비교를 위해 최소 4개 주차 이상의 "
-        "데이터를 선택해 주세요."
-    )
+forecast_count = st.slider(
+    "몇 주 후까지 예측할까요?",
+    min_value=1,
+    max_value=12,
+    value=4
+)
+
+exclude_last = st.checkbox(
+    "마지막 주차 데이터는 부분 집계일 수 있으므로 "
+    "예측 학습에서 제외하기",
+    value=True
+)
+
+# 예측 학습 데이터
+train_df = df.copy()
+
+if exclude_last and len(train_df) > 4:
+    train_df = train_df[
+        train_df["주차"] < last_week
+    ].copy()
+
+if len(train_df) < 4:
+    st.warning("예측 학습 데이터가 부족합니다.")
     st.stop()
 
+X = train_df[["주차"]].values
 
-# X: 주차
-X = selected_df[["주차"]].values
+y = train_df["전체승차인원"].values
 
-# y: 전체 승차인원
-y = selected_df["전체승차인원"].values
+future_weeks = np.arange(
+    last_week + 1,
+    last_week + forecast_count + 1
+)
+
+future_X = future_weeks.reshape(-1, 1)
 
 
 # ==========================================
-# 8. 세 가지 알고리즘 생성
+# 8. 알고리즘 3가지
 # ==========================================
 
 models = {
     "선형회귀": LinearRegression(),
 
     "랜덤 포레스트": RandomForestRegressor(
-        n_estimators=100,
-        max_depth=3,
+        n_estimators=200,
+        max_depth=4,
         random_state=42
     ),
 
     "의사결정나무": DecisionTreeRegressor(
-        max_depth=3,
+        max_depth=4,
         random_state=42
     )
 }
 
-
-# 그래프용 주차
-graph_weeks = np.arange(
-    start_week,
-    end_week + 1
-).reshape(-1, 1)
-
-
-results = []
 predictions = {}
+results = []
 
 for name, model in models.items():
 
+    # 모델 학습
     model.fit(X, y)
 
-    # 학습 데이터 예측
-    train_pred = model.predict(X)
+    # 과거 학습 데이터 예측
+    train_prediction = model.predict(X)
 
-    # 그래프용 예측
-    graph_pred = model.predict(graph_weeks)
+    # 미래 예측
+    future_prediction = model.predict(future_X)
 
-    # 성능 측정
+    # 승차인원이 음수가 될 수 없도록 처리
+    future_prediction = np.maximum(
+        future_prediction,
+        0
+    )
+
+    predictions[name] = future_prediction
+
     mae = mean_absolute_error(
         y,
-        train_pred
+        train_prediction
     )
 
     r2 = r2_score(
         y,
-        train_pred
+        train_prediction
     )
 
     results.append({
@@ -427,20 +421,20 @@ for name, model in models.items():
         "결정계수(R²)": round(r2, 3)
     })
 
-    predictions[name] = graph_pred
-
 
 # ==========================================
-# 9. 알고리즘별 그래프
+# 9. 미래 예측 그래프
 # ==========================================
 
-fig_model = go.Figure()
+st.subheader("📊 실제 승차인원과 미래 예측 비교")
+
+fig_future = go.Figure()
 
 # 실제 데이터
-fig_model.add_trace(
+fig_future.add_trace(
     go.Scatter(
-        x=selected_df["주차"],
-        y=y,
+        x=df["주차"],
+        y=df["전체승차인원"],
         mode="lines+markers",
         name="실제 승차인원",
         line=dict(
@@ -450,53 +444,141 @@ fig_model.add_trace(
     )
 )
 
-colors = [
-    "#E74C3C",
-    "#3498DB",
-    "#2ECC71"
-]
+colors = {
+    "선형회귀": "red",
+    "랜덤 포레스트": "blue",
+    "의사결정나무": "green"
+}
 
-for (name, pred), color in zip(
-    predictions.items(),
-    colors
-):
+# 알고리즘별 예측선
+for name, prediction in predictions.items():
 
-    fig_model.add_trace(
+    # 마지막 실제 데이터와 미래 예측 연결
+    graph_x = np.concatenate(
+        ([last_week], future_weeks)
+    )
+
+    last_actual = float(
+        df.loc[
+            df["주차"] == last_week,
+            "전체승차인원"
+        ].iloc[0]
+    )
+
+    graph_y = np.concatenate(
+        ([last_actual], prediction)
+    )
+
+    fig_future.add_trace(
         go.Scatter(
-            x=graph_weeks.flatten(),
-            y=pred,
-            mode="lines",
+            x=graph_x,
+            y=graph_y,
+            mode="lines+markers",
             name=name,
             line=dict(
-                color=color,
-                width=2,
+                color=colors[name],
+                width=3,
                 dash="dash"
             )
         )
     )
 
+fig_future.add_vline(
+    x=last_week,
+    line_dash="dot",
+    line_color="gray",
+    annotation_text="미래 예측 시작"
+)
 
-fig_model.update_layout(
-    title="실제 승차인원과 알고리즘별 분석 비교",
+fig_future.update_layout(
+    title="SRT 미래 주차별 승차인원 예측",
     xaxis_title="주차",
     yaxis_title="승차인원 (명)",
-    xaxis=dict(dtick=1),
+    xaxis=dict(
+        dtick=1
+    ),
     template="plotly_white",
-    height=500,
-    hovermode="x unified"
+    height=550,
+    hovermode="x unified",
+    legend_title="분석 구분"
 )
 
 st.plotly_chart(
-    fig_model,
+    fig_future,
     use_container_width=True
 )
 
 
 # ==========================================
-# 10. 알고리즘 성능 비교표
+# 10. 미래 예측값 비교표
 # ==========================================
 
-st.markdown("### 📊 알고리즘 성능 비교")
+st.subheader("🔢 미래 주차별 예측 승차인원")
+
+forecast_table = pd.DataFrame({
+    "예측 주차": [
+        f"{w}주차" for w in future_weeks
+    ],
+    "선형회귀": predictions["선형회귀"],
+    "랜덤 포레스트": predictions["랜덤 포레스트"],
+    "의사결정나무": predictions["의사결정나무"]
+})
+
+for col in [
+    "선형회귀",
+    "랜덤 포레스트",
+    "의사결정나무"
+]:
+    forecast_table[col] = (
+        forecast_table[col].round(0).astype(int)
+    )
+
+st.dataframe(
+    forecast_table.style.format({
+        "선형회귀": "{:,}명",
+        "랜덤 포레스트": "{:,}명",
+        "의사결정나무": "{:,}명"
+    }),
+    use_container_width=True,
+    hide_index=True
+)
+
+
+# ==========================================
+# 11. 미래 승차인원 요약
+# ==========================================
+
+st.subheader("🏆 알고리즘별 미래 예측 요약")
+
+summary = []
+
+for name, prediction in predictions.items():
+
+    highest_index = int(
+        np.argmax(prediction)
+    )
+
+    summary.append({
+        "알고리즘": name,
+        "가장 많은 승차인원이 예상되는 주차":
+            f"{future_weeks[highest_index]}주차",
+        "최대 예측 승차인원":
+            f"{int(round(prediction[highest_index])):,}명"
+    })
+
+st.dataframe(
+    pd.DataFrame(summary),
+    use_container_width=True,
+    hide_index=True
+)
+
+
+# ==========================================
+# 12. 알고리즘 성능 비교
+# ==========================================
+
+st.divider()
+st.header("🤖 알고리즘 성능 비교")
 
 result_df = pd.DataFrame(results)
 
@@ -507,80 +589,77 @@ st.dataframe(
 )
 
 st.caption(
-    "MAE는 예측값과 실제값의 평균적인 차이이며 "
-    "낮을수록 좋습니다. R²는 학습 데이터에 대한 "
-    "설명력을 나타내며 높을수록 좋습니다. "
-    "두 지표 모두 선택한 데이터에 대한 학습 결과이므로 "
-    "새로운 주차에 대한 예측 성능과는 다를 수 있습니다."
+    "MAE는 학습 데이터에서 예측값과 실제값의 평균 차이입니다. "
+    "R²는 학습 데이터에 대한 설명력을 나타냅니다. "
+    "이 값은 학습 데이터 기준이므로 미래 예측의 정확도를 "
+    "직접 보장하지 않습니다."
 )
 
 
 # ==========================================
-# 11. 알고리즘 설명
+# 13. 알고리즘 설명
 # ==========================================
 
 st.divider()
-st.subheader("📚 알고리즘 알아보기")
+st.header("📚 알고리즘 알아보기")
 
-with st.expander("① 선형회귀 (Linear Regression)"):
+with st.expander("① 선형회귀"):
 
     st.write(
-        "주차가 증가함에 따라 승차인원이 "
-        "어떻게 변화하는지 직선 형태로 분석합니다."
+        "과거 주차와 승차인원 사이의 직선 관계를 학습합니다. "
+        "전체적인 증가 또는 감소 추세를 미래로 연장합니다."
     )
 
     st.latex("y = ax + b")
 
+with st.expander("② 랜덤 포레스트"):
+
     st.write(
-        "전체적인 증가 또는 감소 추세를 "
-        "파악하는 데 유용합니다."
+        "여러 개의 의사결정나무를 학습시키고 "
+        "그 결과를 평균하여 예측합니다. "
+        "복잡한 패턴을 학습할 수 있지만 "
+        "학습 범위 밖의 미래 추세를 연장하는 데는 한계가 있습니다."
     )
 
-
-with st.expander("② 랜덤 포레스트 (Random Forest)"):
-
-    st.write(
-        "여러 개의 의사결정나무를 만들어 "
-        "각 결과를 종합하는 알고리즘입니다."
-    )
+with st.expander("③ 의사결정나무"):
 
     st.write(
-        "복잡한 데이터 패턴을 학습할 수 있지만 "
-        "데이터가 적으면 결과가 불안정할 수 있습니다."
-    )
-
-
-with st.expander("③ 의사결정나무 (Decision Tree)"):
-
-    st.write(
-        "데이터를 여러 구간으로 나누어 "
-        "승차인원 패턴을 분석합니다."
-    )
-
-    st.write(
-        "특정 주차 구간에서 승차인원이 "
-        "어떻게 달라지는지 살펴보기 좋습니다."
+        "주차에 따라 데이터를 여러 구간으로 나누어 "
+        "각 구간의 승차인원 패턴을 학습합니다. "
+        "미래 주차가 학습 범위를 벗어나면 "
+        "마지막 구간의 예측값이 유지될 수 있습니다."
     )
 
 
 # ==========================================
-# 12. 분석 결과 요약
+# 14. 최종 분석 결과
 # ==========================================
 
 st.divider()
-
-st.subheader("📝 분석 결과 요약")
+st.header("📝 전체 분석 결과")
 
 st.markdown(
     f"""
-    - 분석 기간: **{start_week}주차 ~ {end_week}주차**
-    - 가장 많이 이용한 역: **{top_station}역**
-    - 해당 역의 승차인원 합계: **{top_passengers:,}명**
-    - 전체 승차인원이 가장 많은 주차: **{max_week_number}주차**
-    - 해당 주차의 전체 승차인원: **{max_week_passengers:,}명**
-    - 분석 알고리즘: **선형회귀, 랜덤 포레스트, 의사결정나무**
+    ### 📊 과거 데이터 분석
+
+    - 분석 주차: {start_week}주차 ~ {end_week}주차
+    - 가장 많이 탄 역: **{top_station}**
+    - 해당 역 승차인원: **{top_passengers:,}명**
+    - 가장 많이 탄 주차: **{max_week}주차**
+    - 해당 주차 전체 승차인원: **{max_week_passengers:,}명**
+
+    ### 🔮 미래 예측
+
+    - 마지막 데이터 주차: **{last_week}주차**
+    - 예측 기간: **{last_week + 1}주차 ~ {last_week + forecast_count}주차**
+    - 사용 알고리즘: **선형회귀, 랜덤 포레스트, 의사결정나무**
     """
 )
 
-st.success("SRT 승차인원 분석이 완료되었습니다! 🚄")
+st.success("SRT 승차인원 분석 및 미래 예측 완료! 🚄")
 
+st.caption(
+    "주의: 미래 예측은 과거 패턴에 기반한 추정치입니다. "
+    "실제 승차인원은 명절, 휴가철, 요일, 날씨, 열차 운행 변화 등에 "
+    "따라 달라질 수 있습니다."
+)
